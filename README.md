@@ -1,2 +1,2 @@
-# sqlambda
-Language for data {engineers, analysts, scientists}
+# SQLambda
+Programming language for data {engineers, analysts, scientists}
