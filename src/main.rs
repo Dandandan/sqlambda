@@ -96,7 +96,6 @@ fn test_parser() {
             assert_eq!(eq.name, "x");
             assert_eq!(eq.expr.span.location_offset(), 2);
             assert_eq!(eq.expr.span.get_utf8_column(), 3);
-
         }
         _ => panic!("Did not expect something else than Equation"),
     }
