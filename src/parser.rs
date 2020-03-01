@@ -80,6 +80,7 @@ pub struct AnnotatedExpr<'a> {
     /// is located in source file
     span: Span<'a>,
 }
+
 #[derive(Debug, PartialEq)]
 enum Expr<'a> {
     /// Binds an expression to a name
@@ -96,7 +97,7 @@ struct Equation<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Literal {
+pub enum Literal {
     Long(i64),
     Float(f64),
 }
