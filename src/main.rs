@@ -22,20 +22,26 @@ fn digit(i: Span) -> IResult<Span, Literal> {
     Ok((i, Literal::Long(span.fragment().parse().unwrap())))
 }
 
-fn boolean(i: Span) -> IResult<Span, Literal> {
-    let (i, span) = alt((tag("false"), tag("true")))(i)?;
+fn float(i: Span) -> IResult<Span, Literal> {
+    let (i, span1) = digit1(i)?;
 
-    let bool_val = match span.fragment() {
-        &"true" => Literal::Boolean(true),
-        &"false" => Literal::Boolean(false),
-        _ => unreachable!(),
-    };
+    let (i, _) = tag(".")(i)?;
 
-    Ok((i, bool_val))
+    let (i, span2) = digit1(i)?;
+
+    // TODO, create from slice
+    Ok((
+        i,
+        Literal::Float(
+            format!("{}.{}", span1.fragment(), span2.fragment())
+                .parse()
+                .unwrap(),
+        ),
+    ))
 }
 
 fn literal(i: Span) -> IResult<Span, Literal> {
-    alt((digit, boolean))(i)
+    alt((float, digit))(i)
 }
 
 fn parser(i: Span) -> IResult<Span, AnnotatedExpr> {
@@ -61,12 +67,12 @@ fn parser(i: Span) -> IResult<Span, AnnotatedExpr> {
         },
     ))
 }
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct AnnotatedExpr<'a> {
     expr: Expr<'a>,
     span: Span<'a>,
 }
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Expr<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
@@ -75,19 +81,19 @@ enum Expr<'a> {
     Literal(Literal),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct Equation<'a> {
     name: &'a str,
     expr: Box<AnnotatedExpr<'a>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Literal {
     Long(i64),
-    Boolean(bool),
+    Float(f64),
 }
 fn main() -> io::Result<()> {
-    let mut file = File::open("example.sql")?;
+    let mut file = File::open("example.sqla")?;
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -116,20 +122,11 @@ fn test_parser() {
         _ => panic!("Did not expect something else than Equation"),
     }
 }
-
 #[test]
 fn test_bool_true() {
-    let res = literal(Span::new("true"));
+    let res = literal(Span::new("2.0"));
 
     assert!(res.is_ok());
 
-    assert_eq!(res.unwrap().1, Literal::Boolean(true))
-}
-#[test]
-fn test_bool_false() {
-    let res = literal(Span::new("false"));
-
-    assert!(res.is_ok());
-
-    assert_eq!(res.unwrap().1, Literal::Boolean(false))
+    assert_eq!(res.unwrap().1, Literal::Float(2.0))
 }
