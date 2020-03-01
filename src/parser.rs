@@ -4,7 +4,7 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-use nom::character::complete::{alpha1, digit0, digit1};
+use nom::character::complete::{alpha1, digit0, digit1, multispace0};
 
 use nom::{branch::alt, bytes::complete::tag, IResult};
 
@@ -12,13 +12,16 @@ fn identifier(i: Span) -> IResult<Span, Span> {
     alpha1(i)
 }
 
-fn digit(i: Span) -> IResult<Span, Literal> {
+fn digit(i: Span) -> IResult<Span, Expr> {
     let (i, span) = digit1(i)?;
     // TODO: show error if parsing fails
-    Ok((i, Literal::Long(span.fragment().parse().unwrap())))
+    Ok((
+        i,
+        Expr::Literal(Literal::Long(span.fragment().parse().unwrap())),
+    ))
 }
 
-fn float(input: Span) -> IResult<Span, Literal> {
+fn float(input: Span) -> IResult<Span, Expr> {
     let (_, start_pos) = position(input)?;
 
     let (i, _) = digit1(input)?;
@@ -31,16 +34,17 @@ fn float(input: Span) -> IResult<Span, Literal> {
 
     Ok((
         i,
-        Literal::Float(
+        Expr::Literal(Literal::Float(
             // TODO: Show error if parsing fails
             input.fragment()[0..end_pos.location_offset() - start_pos.location_offset()]
                 .parse()
                 .unwrap(),
-        ),
+        )),
     ))
 }
 
-fn literal(i: Span) -> IResult<Span, Literal> {
+fn expression(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = multispace0(i)?;
     alt((float, digit))(i)
 }
 
@@ -52,7 +56,9 @@ pub fn parse_module(i: Span) -> IResult<Span, AnnotatedExpr> {
     let (i, _d) = tag("=")(i)?;
     let (_, pos2) = position(i)?;
 
-    let (i, literal) = literal(i)?;
+    let (i, expr) = expression(i)?;
+    let (i, _) = multispace0(i)?;
+
     Ok((
         i,
         AnnotatedExpr {
@@ -61,7 +67,7 @@ pub fn parse_module(i: Span) -> IResult<Span, AnnotatedExpr> {
                 name: &name.fragment(),
                 expr: Box::new(AnnotatedExpr {
                     span: pos2,
-                    expr: Expr::Literal(literal),
+                    expr: expr,
                 }),
             }),
         },
@@ -114,18 +120,27 @@ fn test_parse_module() {
 }
 #[test]
 fn test_parse_float() {
-    let res = literal(Span::new("2.0"));
+    let res = expression(Span::new("2.0"));
 
     assert!(res.is_ok());
 
-    assert_eq!(res.unwrap().1, Literal::Float(2.0))
+    assert_eq!(res.unwrap().1, Expr::Literal(Literal::Float(2.0)))
 }
 
 #[test]
 fn test_parse_float_no_decimal() {
-    let res = literal(Span::new("2."));
+    let res = expression(Span::new("2."));
 
     assert!(res.is_ok());
 
-    assert_eq!(res.unwrap().1, Literal::Float(2.))
+    assert_eq!(res.unwrap().1, Expr::Literal(Literal::Float(2.)))
+}
+
+#[test]
+fn test_parse_float_whitespace() {
+    let res = expression(Span::new(" 2. "));
+
+    assert!(res.is_ok());
+
+    assert_eq!(res.unwrap().1, Expr::Literal(Literal::Float(2.)))
 }
