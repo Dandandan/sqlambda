@@ -27,4 +27,3 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
-
