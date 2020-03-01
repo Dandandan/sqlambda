@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 mod parser;
+mod types;
 fn main() -> io::Result<()> {
     let mut file = File::open("example.sqla")?;
 
