@@ -8,30 +8,45 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 type Span<'a> = LocatedSpan<&'a str>;
+use nom::character::complete::{alpha1, digit1};
 
-use nom::{
-    bytes::complete::{tag, take_while1},
-    IResult,
-};
+use nom::{branch::alt, bytes::complete::tag, IResult};
 
-fn decl_parser(i: Span) -> IResult<Span, Span> {
-    take_while1(|c: char| c.is_alphabetic())(i)
+fn identifier(i: Span) -> IResult<Span, Span> {
+    alpha1(i)
 }
 
-fn lit_parser(i: Span) -> IResult<Span, Span> {
-    take_while1(|c: char| c.is_ascii_digit())(i)
+fn digit(i: Span) -> IResult<Span, Literal> {
+    let (i, span) = digit1(i)?;
+
+    Ok((i, Literal::Long(span.fragment().parse().unwrap())))
+}
+
+fn boolean(i: Span) -> IResult<Span, Literal> {
+    let (i, span) = alt((tag("false"), tag("true")))(i)?;
+
+    let bool_val = match span.fragment() {
+        &"true" => Literal::Boolean(true),
+        &"false" => Literal::Boolean(false),
+        _ => unreachable!(),
+    };
+
+    Ok((i, bool_val))
+}
+
+fn literal(i: Span) -> IResult<Span, Literal> {
+    alt((digit, boolean))(i)
 }
 
 fn parser(i: Span) -> IResult<Span, AnnotatedExpr> {
     let (_, pos) = position(i)?;
 
-    let (i, name) = decl_parser(i)?;
+    let (i, name) = identifier(i)?;
 
     let (i, _d) = tag("=")(i)?;
     let (_, pos2) = position(i)?;
 
-    let (i, expr) = lit_parser(i)?;
-    let parsed_integer = expr.fragment().parse().unwrap();
+    let (i, literal) = literal(i)?;
     Ok((
         i,
         AnnotatedExpr {
@@ -40,7 +55,7 @@ fn parser(i: Span) -> IResult<Span, AnnotatedExpr> {
                 name: &name.fragment(),
                 expr: Box::new(AnnotatedExpr {
                     span: pos2,
-                    expr: Expr::Literal(Literal::Long(parsed_integer)),
+                    expr: Expr::Literal(literal),
                 }),
             }),
         },
@@ -69,6 +84,7 @@ struct Equation<'a> {
 #[derive(Debug, Eq, PartialEq)]
 enum Literal {
     Long(i64),
+    Boolean(bool),
 }
 fn main() -> io::Result<()> {
     let mut file = File::open("example.sql")?;
@@ -99,6 +115,21 @@ fn test_parser() {
         }
         _ => panic!("Did not expect something else than Equation"),
     }
+}
 
-    //assert_eq!(x, "abc");
+#[test]
+fn test_bool_true() {
+    let res = literal(Span::new("true"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(res.unwrap().1, Literal::Boolean(true))
+}
+#[test]
+fn test_bool_false() {
+    let res = literal(Span::new("false"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(res.unwrap().1, Literal::Boolean(false))
 }
