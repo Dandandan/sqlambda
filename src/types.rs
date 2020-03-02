@@ -1,12 +1,22 @@
-use super::parser::Literal;
+use super::parser::{Expr, Literal};
+
 #[derive(Eq, PartialEq, Debug)]
-enum Type {
+pub enum Type {
     Long,
     Float,
 }
 
+impl<'a> Expr<'a> {
+    pub fn get_type(&self) -> Option<Type> {
+        match self {
+            Expr::Literal(l) => Some(l.get_type()),
+            _ => None,
+        }
+    }
+}
+
 impl Literal {
-    fn get_type(self) -> Type {
+    fn get_type(&self) -> Type {
         match self {
             Literal::Long(_) => Type::Long,
             Literal::Float(_) => Type::Float,
