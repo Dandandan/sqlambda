@@ -1,7 +1,7 @@
-use super::parser::{Expr, Literal};
+use super::parser::Expr;
 
 impl<'a> Expr<'a> {
-    pub fn eval(self) -> Expr<'a> {
+    pub fn eval(&self) -> &Expr<'a> {
         match self {
             Expr::Equation(_x) => {
                 unimplemented!();
@@ -14,6 +14,8 @@ impl<'a> Expr<'a> {
     }
 }
 
+#[cfg(test)]
+use super::parser::Literal;
 #[test]
 fn test_eval() {
     assert_eq!(

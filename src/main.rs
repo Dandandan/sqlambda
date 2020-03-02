@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+mod display;
 mod eval;
 mod parser;
 mod types;
@@ -22,11 +23,18 @@ fn main() -> io::Result<()> {
         stdin()
             .read_line(&mut s)
             .expect("Did not enter a correct string");
-        let exp = parser::expression(parser::Span::new(&s));
 
-        match exp {
+        match parser::expression(parser::Span::new(&s)) {
             Ok((_i, exp)) => {
-                println!("{:?}", exp.eval());
+                let ty = exp.get_type();
+                match ty {
+                    Some(ty) => {
+                        println!("{:} : {:?}", exp.eval(), ty);
+                    }
+                    _ => {
+                        println!("Error: no expression");
+                    }
+                }
             }
             Err(x) => {
                 println!("Error: {:?}", x);
