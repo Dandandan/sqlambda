@@ -1,9 +1,10 @@
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+mod eval;
 mod parser;
 mod types;
-use std::io::{stdin, stdout, Write};
+use std::io::stdin;
 
 fn main() -> io::Result<()> {
     let mut file = File::open("example.sqla")?;
@@ -21,7 +22,15 @@ fn main() -> io::Result<()> {
         stdin()
             .read_line(&mut s)
             .expect("Did not enter a correct string");
+        let exp = parser::expression(parser::Span::new(&s));
 
-        println!("{:?}", parser::expression(parser::Span::new(&s)));
+        match exp {
+            Ok((_i, exp)) => {
+                println!("{:?}", exp.eval());
+            }
+            Err(x) => {
+                println!("Error: {:?}", x);
+            }
+        }
     }
 }
