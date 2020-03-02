@@ -27,5 +27,4 @@ fn main() -> io::Result<()> {
 
         println!("{:?}", parser::expression(parser::Span::new(&s)));
     }
-    Ok(())
 }
