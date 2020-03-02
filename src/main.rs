@@ -15,8 +15,6 @@ fn main() -> io::Result<()> {
 
     println!("Result: {:?}!", f);
 
-    //Ok(());
-
     loop {
         let _ = stdout().flush();
         let mut s = String::new();
