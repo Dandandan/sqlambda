@@ -3,6 +3,8 @@ use std::io;
 use std::io::prelude::*;
 mod parser;
 mod types;
+use std::io::{stdin, stdout, Write};
+
 fn main() -> io::Result<()> {
     let mut file = File::open("example.sqla")?;
 
@@ -13,5 +15,17 @@ fn main() -> io::Result<()> {
 
     println!("Result: {:?}!", f);
 
+    //Ok(());
+
+    loop {
+        let _ = stdout().flush();
+        let mut s = String::new();
+
+        stdin()
+            .read_line(&mut s)
+            .expect("Did not enter a correct string");
+
+        println!("{:?}", parser::expression(parser::Span::new(&s)));
+    }
     Ok(())
 }

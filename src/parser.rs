@@ -6,7 +6,27 @@ use nom_locate::{position, LocatedSpan};
 pub type Span<'a> = LocatedSpan<&'a str>;
 use nom::character::complete::{alpha1, digit0, digit1, multispace0};
 
-use nom::{branch::alt, bytes::complete::tag, IResult};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_until},
+    IResult,
+};
+
+fn comment(input: Span) -> IResult<Span, Expr> {
+    let (i, _) = tag("--")(input)?;
+
+    let (_, start_pos) = position(i)?;
+
+    let (i, _) = take_until("\n")(i)?;
+    let (_, end_pos) = position(i)?;
+
+    Ok((
+        i,
+        Expr::Comment(
+            &input.fragment()[2..2 + end_pos.location_offset() - start_pos.location_offset()],
+        ),
+    ))
+}
 
 fn identifier(i: Span) -> IResult<Span, Span> {
     alpha1(i)
@@ -43,9 +63,9 @@ fn float(input: Span) -> IResult<Span, Expr> {
     ))
 }
 
-fn expression(i: Span) -> IResult<Span, Expr> {
+pub fn expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = multispace0(i)?;
-    alt((float, digit))(i)
+    alt((float, digit, comment))(i)
 }
 
 pub fn parse_module(i: Span) -> IResult<Span, AnnotatedExpr> {
@@ -82,16 +102,17 @@ pub struct AnnotatedExpr<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Expr<'a> {
+pub enum Expr<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
-
+    /// Normal comment
+    Comment(&'a str),
     /// Literal values
     Literal(Literal),
 }
 
 #[derive(Debug, PartialEq)]
-struct Equation<'a> {
+pub struct Equation<'a> {
     name: &'a str,
     expr: Box<AnnotatedExpr<'a>>,
 }
@@ -144,4 +165,13 @@ fn test_parse_float_whitespace() {
     assert!(res.is_ok());
 
     assert_eq!(res.unwrap().1, Expr::Literal(Literal::Float(2.)))
+}
+
+#[test]
+fn test_parse_comment() {
+    let res = expression(Span::new("--comment\n"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(res.unwrap().1, Expr::Comment("comment"))
 }
