@@ -26,13 +26,18 @@ fn main() -> io::Result<()> {
 
         match parser::expression(parser::Span::new(&s)) {
             Ok((_i, exp)) => {
-                let ty = exp.get_type();
+                let env = &mut std::collections::HashMap::new();
+                let ty = exp.get_type(env);
                 match ty {
-                    Some(ty) => {
-                        println!("{:} : {:?}", exp.eval(), ty);
+                    Ok(ty) => {
+                        println!(
+                            "{:} : {:?}",
+                            exp.eval(&mut std::collections::HashMap::new()),
+                            ty
+                        );
                     }
-                    _ => {
-                        println!("Error: no expression");
+                    Err(err) => {
+                        println!("Error: {}", err);
                     }
                 }
             }
