@@ -4,11 +4,12 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-use nom::character::complete::{alpha1, digit0, digit1, multispace0};
+use nom::character::complete::{alpha1, digit0, digit1, multispace0, space0};
 
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
+    multi::many0,
     IResult,
 };
 
@@ -34,11 +35,13 @@ fn identifier(i: Span) -> IResult<Span, Span> {
 
 fn digit(i: Span) -> IResult<Span, Expr> {
     let (i, span) = digit1(i)?;
-    // TODO: show error if parsing fails
-    Ok((
-        i,
-        Expr::Literal(Literal::Long(span.fragment().parse().unwrap())),
-    ))
+    let integer = span.fragment().parse();
+    let x = match integer {
+        Ok(f) => f,
+        Err(_) => return Err(nom::Err::Error((i, nom::error::ErrorKind::Digit))),
+    };
+
+    Ok((i, Expr::Literal(Literal::Long(x))))
 }
 
 fn float(input: Span) -> IResult<Span, Expr> {
@@ -52,15 +55,14 @@ fn float(input: Span) -> IResult<Span, Expr> {
 
     let (_, end_pos) = position(i)?;
 
-    Ok((
-        i,
-        Expr::Literal(Literal::Float(
-            // TODO: Show error if parsing fails
-            input.fragment()[0..end_pos.location_offset() - start_pos.location_offset()]
-                .parse()
-                .unwrap(),
-        )),
-    ))
+    let float =
+        input.fragment()[0..end_pos.location_offset() - start_pos.location_offset()].parse();
+    let x = match float {
+        Ok(f) => f,
+        Err(_) => return Err(nom::Err::Error((i, nom::error::ErrorKind::Float))),
+    };
+
+    Ok((i, Expr::Literal(Literal::Float(x))))
 }
 
 pub fn expression(i: Span) -> IResult<Span, Expr> {
@@ -68,10 +70,12 @@ pub fn expression(i: Span) -> IResult<Span, Expr> {
     alt((float, digit, comment))(i)
 }
 
-pub fn parse_module(i: Span) -> IResult<Span, AnnotatedExpr> {
+pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
     let (_, pos) = position(i)?;
 
     let (i, name) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
 
     let (i, _d) = tag("=")(i)?;
     let (_, pos2) = position(i)?;
@@ -101,6 +105,10 @@ pub struct AnnotatedExpr<'a> {
     span: Span<'a>,
 }
 
+pub fn parse_module(i: Span) -> IResult<Span, Vec<AnnotatedExpr>> {
+    many0(parse_decl)(i)
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Expr<'a> {
     /// Binds an expression to a name
@@ -124,8 +132,8 @@ pub enum Literal {
 }
 
 #[test]
-fn test_parse_module() {
-    let res = parse_module(Span::new("x=1"));
+fn test_parse_decl() {
+    let res = parse_decl(Span::new("x=1"));
     assert!(res.is_ok());
     let res = res.unwrap();
     assert_eq!(res.1.span.location_offset(), 0);
@@ -140,6 +148,7 @@ fn test_parse_module() {
         _ => panic!("Did not expect something else than Equation"),
     }
 }
+
 #[test]
 fn test_parse_float() {
     let res = expression(Span::new("2.0"));
@@ -147,6 +156,13 @@ fn test_parse_float() {
     assert!(res.is_ok());
 
     assert_eq!(res.unwrap().1, Expr::Literal(Literal::Float(2.0)))
+}
+
+#[test]
+fn test_parse_digit_long() {
+    let res = expression(Span::new("999999999999999999999999"));
+
+    assert!(res.is_err());
 }
 
 #[test]
@@ -174,4 +190,29 @@ fn test_parse_comment() {
     assert!(res.is_ok());
 
     assert_eq!(res.unwrap().1, Expr::Comment("comment"))
+}
+
+#[test]
+fn test_multiple_decls() {
+    let res = parse_module(Span::new("x=1\ny=2"));
+
+    assert!(res.is_ok());
+
+    let res = res.unwrap();
+
+    match &res.1[0].expr {
+        Expr::Equation(eq) => {
+            assert_eq!(eq.name, "x");
+            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Long(1)));
+        }
+        _ => panic!("Did not expect something else than Equation"),
+    }
+
+    match &res.1[1].expr {
+        Expr::Equation(eq) => {
+            assert_eq!(eq.name, "y");
+            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Long(2)));
+        }
+        _ => panic!("Did not expect something else than Equation"),
+    }
 }
