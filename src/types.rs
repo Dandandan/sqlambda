@@ -7,12 +7,8 @@ pub enum Type {
     Float,
 }
 
-impl<'a> Expr<'a> {
-    pub fn get_type(
-        &self,
-        // TODO use type environment
-        env: &'a mut std::collections::HashMap<String, Type>,
-    ) -> Result<Type, String> {
+impl<'a> Expr<'_> {
+    pub fn get_type(&self, env: &im::HashMap<String, Type>) -> Result<Type, String> {
         match self {
             Expr::Literal(l) => Ok(l.get_type()),
             Expr::Ref(x) => {
@@ -21,8 +17,8 @@ impl<'a> Expr<'a> {
             }
             Expr::LetIn(x) => {
                 let ty1 = x.expr1.expr.get_type(env)?;
-                env.insert(x.name.to_string(), ty1);
-                x.expr2.expr.get_type(env)
+                let type_env1 = env.update(x.name.to_string(), ty1);
+                x.expr2.expr.get_type(&type_env1)
             }
             _ => Err("unsupported".to_string()),
         }

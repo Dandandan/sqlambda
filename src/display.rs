@@ -1,3 +1,4 @@
+use super::eval::Value;
 use super::parser::{Expr, Literal};
 use std::fmt;
 
@@ -19,7 +20,16 @@ impl fmt::Display for Literal {
         }
     }
 }
-
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Int64(i) => write!(f, "{}", i),
+            Value::Int32(i) => write!(f, "{}", i),
+            Value::Float(i) => write!(f, "{}", i),
+            Value::Unit => write!(f, "()"),
+        }
+    }
+}
 #[test]
 fn test_display_long() {
     assert_eq!(format!("{}", Expr::Literal(Literal::Int64(1))), "1")

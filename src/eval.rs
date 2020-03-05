@@ -1,7 +1,15 @@
-use super::parser::Expr;
+use super::parser::{Expr, Literal};
+extern crate im;
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Value {
+    Unit,
+    Float(f64),
+    Int64(i64),
+    Int32(i32),
+}
 
-impl<'a> Expr<'a> {
-    pub fn eval(&'a self, e: &mut std::collections::HashMap<String, &'a Expr<'a>>) -> &'a Expr<'a> {
+impl<'a> Expr<'_> {
+    pub fn eval(&self, e: &im::HashMap<String, Value>) -> Result<Value, String> {
         match self {
             Expr::Equation(_x) => {
                 unimplemented!();
@@ -10,19 +18,25 @@ impl<'a> Expr<'a> {
                 unimplemented!();
             }
             Expr::LetIn(l) => {
-                let r = l.expr1.expr.eval(e);
-                e.insert(l.name.to_string(), r);
-                l.expr2.as_ref().expr.eval(e)
-            }
-            Expr::Ref(r) => e.get(*r).unwrap(),
+                let r = l.expr1.expr.eval(e)?;
+                let m = e.update(l.name.to_string(), r);
+                let res = l.expr2.as_ref().expr.eval(&m)?;
 
-            x @ Expr::Literal(_) => x,
+                Ok(res)
+            }
+            Expr::Ref(r) => {
+                let x = e.get(*r).ok_or("Ref not found")?;
+                Ok(*x)
+            }
+
+            Expr::Literal(Literal::Float(f)) => Ok(Value::Float(*f)),
+            Expr::Literal(Literal::Int32(f)) => Ok(Value::Int32(*f)),
+            Expr::Literal(Literal::Int64(f)) => Ok(Value::Int64(*f)),
         }
     }
 }
 
 #[cfg(test)]
-use super::parser::Literal;
 #[test]
 fn test_eval() {
     assert_eq!(

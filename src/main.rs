@@ -16,7 +16,8 @@ fn main() -> io::Result<()> {
     let f = parser::parse_module(parser::Span::new(&contents));
 
     println!("Result: {:?}!", f);
-
+    let type_env = &im::HashMap::new();
+    let env = &im::HashMap::new();
     loop {
         let mut s = String::new();
 
@@ -26,15 +27,13 @@ fn main() -> io::Result<()> {
 
         match parser::expression(parser::Span::new(&s)) {
             Ok((_i, exp)) => {
-                let env = &mut std::collections::HashMap::new();
-                let ty = exp.get_type(env);
+                let ty = exp.get_type(type_env);
                 match ty {
                     Ok(ty) => {
-                        println!(
-                            "{:} : {:?}",
-                            exp.eval(&mut std::collections::HashMap::new()),
-                            ty
-                        );
+                        let res = exp.eval(env);
+                        if let Ok(x) = res {
+                            println!("{:} : {:?}", x, ty);
+                        }
                     }
                     Err(err) => {
                         println!("Error: {}", err);

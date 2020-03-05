@@ -75,7 +75,6 @@ fn identifier(i: Span) -> IResult<Span, Span> {
 
 fn digit<T: std::str::FromStr>(i: Span, f: fn(T) -> Literal) -> IResult<Span, Expr> {
     let (i, span) = digit1(i)?;
-    println!("fragment {}", span.fragment());
     let integer = span.fragment().parse();
     let x = match integer {
         Ok(f) => f,
