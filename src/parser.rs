@@ -27,20 +27,15 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
     let (i, _) = char('{')(input)?;
 
     let (i, _) = space0(i)?;
-    println!("b{}", i);
 
     let (i, header) = separated_list(pair(char(','), space0), identifier)(i)?;
-    println!("c{}", i);
 
     let (i, _) = space0(i)?;
-    println!("d{}", i);
 
     let (i, s) = opt(separated_list(pair(char('\n'), space0), table_row))(i)?;
     let rows = s.unwrap_or(vec![]);
-    println!("e{}", i);
 
     let (i, _) = tag("}")(i)?;
-    println!("a{}", i);
 
     return Ok((
         i,
