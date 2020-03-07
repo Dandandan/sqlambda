@@ -26,6 +26,7 @@ impl fmt::Display for Value {
             Value::Int64(i) => write!(f, "{}", i),
             Value::Int32(i) => write!(f, "{}", i),
             Value::Float(i) => write!(f, "{}", i),
+            Value::DataSet(i, values) => write!(f, "{:?} {:?}", i, values),
             Value::Unit => write!(f, "()"),
         }
     }

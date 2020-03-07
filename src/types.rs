@@ -1,10 +1,11 @@
-use super::parser::{Expr, Literal};
+use super::parser::{Equation, Expr, Literal};
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Type {
     Int64,
     Int32,
     Float,
+    Dataset(Vec<String>, Vec<Type>),
 }
 
 impl<'a> Expr<'_> {
@@ -13,14 +14,16 @@ impl<'a> Expr<'_> {
             Expr::Literal(l) => Ok(l.get_type()),
             Expr::Ref(x) => {
                 let err = format!("Could not find reference {}", x);
-                env.get(*x).map(|x| *x).ok_or(err)
+                env.get(*x).map(|x| x.clone()).ok_or(err)
             }
             Expr::LetIn(x) => {
                 let ty1 = x.expr1.expr.get_type(env)?;
                 let type_env1 = env.update(x.name.to_string(), ty1);
                 x.expr2.expr.get_type(&type_env1)
             }
-            _ => Err("unsupported".to_string()),
+            Expr::DataSet(names, items) => Ok(Type::Dataset(names.clone(), vec![Type::Float])),
+            Expr::Equation(Equation { expr, .. }) => expr.expr.get_type(env), //_ => Err("unsupported".to_string()),
+            _ => Err("not implemented".to_string()),
         }
     }
 }

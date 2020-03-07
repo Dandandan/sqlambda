@@ -36,12 +36,12 @@ fn main() -> io::Result<()> {
                         }
                     }
                     Err(err) => {
-                        println!("Error: {}", err);
+                        println!("TypeError: {}", err);
                     }
                 }
             }
             Err(x) => {
-                println!("Error: {:?}", x);
+                println!("ParseError: {:?}", x);
             }
         }
     }

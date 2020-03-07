@@ -1,11 +1,22 @@
 use super::parser::{Expr, Literal};
 extern crate im;
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Unit,
     Float(f64),
     Int64(i64),
     Int32(i32),
+    DataSet(Vec<String>, Vec<Vec<Value>>),
+}
+
+impl<'a> Literal {
+    pub fn to_value(&self) -> Value {
+        match self {
+            Literal::Float(f) => Value::Float(*f),
+            Literal::Int32(f) => Value::Int32(*f),
+            Literal::Int64(f) => Value::Int64(*f),
+        }
+    }
 }
 
 impl<'a> Expr<'_> {
@@ -25,13 +36,18 @@ impl<'a> Expr<'_> {
                 Ok(res)
             }
             Expr::Ref(r) => {
-                let x = e.get(*r).ok_or("Ref not found")?;
-                Ok(*x)
+                let x = e.get(*r).ok_or(format!("Ref {} not found", r))?;
+                Ok(x.clone())
             }
+            Expr::DataSet(header, values) => Ok(Value::DataSet(
+                header.clone(),
+                values
+                    .into_iter()
+                    .map(|y| y.into_iter().map(|x| x.eval(e).unwrap()).collect())
+                    .collect(),
+            )),
 
-            Expr::Literal(Literal::Float(f)) => Ok(Value::Float(*f)),
-            Expr::Literal(Literal::Int32(f)) => Ok(Value::Int32(*f)),
-            Expr::Literal(Literal::Int64(f)) => Ok(Value::Int64(*f)),
+            Expr::Literal(l) => Ok(l.to_value()),
         }
     }
 }
