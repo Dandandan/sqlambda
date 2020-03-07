@@ -16,7 +16,8 @@ fn main() -> io::Result<()> {
     let f = parser::parse_module(parser::Span::new(&contents));
 
     println!("Result: {:?}!", f);
-
+    let type_env = &im::HashMap::new();
+    let env = &im::HashMap::new();
     loop {
         let mut s = String::new();
 
@@ -26,18 +27,21 @@ fn main() -> io::Result<()> {
 
         match parser::expression(parser::Span::new(&s)) {
             Ok((_i, exp)) => {
-                let ty = exp.get_type();
+                let ty = exp.get_type(type_env);
                 match ty {
-                    Some(ty) => {
-                        println!("{:} : {:?}", exp.eval(), ty);
+                    Ok(ty) => {
+                        let res = exp.eval(env);
+                        if let Ok(x) = res {
+                            println!("{:} : {:?}", x, ty);
+                        }
                     }
-                    _ => {
-                        println!("Error: no expression");
+                    Err(err) => {
+                        println!("TypeError: {}", err);
                     }
                 }
             }
             Err(x) => {
-                println!("Error: {:?}", x);
+                println!("ParseError: {:?}", x);
             }
         }
     }

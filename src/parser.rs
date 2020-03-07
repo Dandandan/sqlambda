@@ -4,14 +4,90 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-use nom::character::complete::{alpha1, digit0, digit1, multispace0, space0};
+use nom::character::complete::{alpha1, char, digit0, digit1, multispace0, space0, space1};
 
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
-    multi::many0,
+    combinator::opt,
+    multi::{many0, separated_list},
+    sequence::pair,
     IResult,
 };
+
+fn table_row(input: Span) -> IResult<Span, Vec<Expr>> {
+    let (i, _) = space0(input)?;
+    separated_list(pair(char(','), space0), expression)(i)
+}
+
+fn table_literal(input: Span) -> IResult<Span, Expr> {
+    // { a, b, ...
+    //   1, 2, ...
+    // }
+    let (i, _) = char('{')(input)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, header) = separated_list(pair(char(','), space0), identifier)(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, s) = opt(separated_list(pair(char('\n'), space0), table_row))(i)?;
+    let rows = s.unwrap_or(vec![]);
+
+    let (i, _) = tag("}")(i)?;
+
+    return Ok((
+        i,
+        Expr::DataSet(
+            header
+                .into_iter()
+                .map(|x| x.fragment().to_string())
+                .collect(),
+            rows.into_iter().map(|x| x).collect(),
+        ),
+    ));
+}
+
+fn let_in_expr(input: Span) -> IResult<Span, Expr> {
+    // let <id> = <e1> in <e2>
+    let (i, _) = tag("let")(input)?;
+
+    let (i, _) = space1(i)?;
+
+    let (i, name) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('=')(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (pos1, expr1) = expression(i)?;
+
+    let (i, _) = space0(pos1)?;
+
+    let (i, _) = tag("in")(i)?;
+
+    let (i, _) = space1(i)?;
+
+    let (pos2, expr2) = expression(i)?;
+
+    Ok((
+        pos2,
+        Expr::LetIn(LetIn {
+            expr1: Box::new(AnnotatedExpr {
+                span: pos1,
+                expr: expr1,
+            }),
+            expr2: Box::new(AnnotatedExpr {
+                span: pos2,
+                expr: expr2,
+            }),
+            name: &name.fragment(),
+        }),
+    ))
+}
 
 fn comment(input: Span) -> IResult<Span, Expr> {
     let (i, _) = tag("--")(input)?;
@@ -30,10 +106,15 @@ fn comment(input: Span) -> IResult<Span, Expr> {
 }
 
 fn identifier(i: Span) -> IResult<Span, Span> {
-    alpha1(i)
+    let (i, id) = alpha1(i)?;
+    // reserved key words
+    if id.fragment() == &"let" {
+        return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
+    }
+    Ok((i, id))
 }
 
-fn digit(i: Span) -> IResult<Span, Expr> {
+fn digit<T: std::str::FromStr>(i: Span, f: fn(T) -> Literal) -> IResult<Span, Expr> {
     let (i, span) = digit1(i)?;
     let integer = span.fragment().parse();
     let x = match integer {
@@ -41,7 +122,11 @@ fn digit(i: Span) -> IResult<Span, Expr> {
         Err(_) => return Err(nom::Err::Error((i, nom::error::ErrorKind::Digit))),
     };
 
-    Ok((i, Expr::Literal(Literal::Long(x))))
+    Ok((i, Expr::Literal(f(x))))
+}
+
+fn int64(i: Span) -> IResult<Span, Expr> {
+    return digit(i, Literal::Int64);
 }
 
 fn float(input: Span) -> IResult<Span, Expr> {
@@ -49,7 +134,7 @@ fn float(input: Span) -> IResult<Span, Expr> {
 
     let (i, _) = digit1(input)?;
 
-    let (i, _) = tag(".")(i)?;
+    let (i, _) = char('.')(i)?;
 
     let (i, _) = digit0(i)?;
 
@@ -65,9 +150,14 @@ fn float(input: Span) -> IResult<Span, Expr> {
     Ok((i, Expr::Literal(Literal::Float(x))))
 }
 
+fn reference(i: Span) -> IResult<Span, Expr> {
+    let (i, name) = identifier(i)?;
+    Ok((i, Expr::Ref(&name.fragment())))
+}
+
 pub fn expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = multispace0(i)?;
-    alt((float, digit, comment))(i)
+    alt((let_in_expr, table_literal, reference, float, int64, comment))(i)
 }
 
 pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
@@ -77,7 +167,7 @@ pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
 
     let (i, _) = space0(i)?;
 
-    let (i, _d) = tag("=")(i)?;
+    let (i, _d) = char('=')(i)?;
     let (_, pos2) = position(i)?;
 
     let (i, expr) = expression(i)?;
@@ -99,7 +189,7 @@ pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
 }
 #[derive(Debug, PartialEq)]
 pub struct AnnotatedExpr<'a> {
-    expr: Expr<'a>,
+    pub expr: Expr<'a>,
     /// Span has extra information about where expression
     /// is located in source file
     span: Span<'a>,
@@ -117,17 +207,31 @@ pub enum Expr<'a> {
     Comment(&'a str),
     /// Literal values
     Literal(Literal),
+    // Variable references
+    Ref(&'a str),
+    // Let in expression
+    LetIn(LetIn<'a>),
+    // Data set
+    DataSet(Vec<String>, Vec<Vec<Expr<'a>>>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LetIn<'a> {
+    pub name: &'a str,
+    pub expr1: Box<AnnotatedExpr<'a>>,
+    pub expr2: Box<AnnotatedExpr<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Equation<'a> {
-    name: &'a str,
-    expr: Box<AnnotatedExpr<'a>>,
+    pub name: &'a str,
+    pub expr: Box<AnnotatedExpr<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Literal {
-    Long(i64),
+    Int64(i64),
+    Int32(i32),
     Float(f64),
 }
 
@@ -203,7 +307,7 @@ fn test_multiple_decls() {
     match &res.1[0].expr {
         Expr::Equation(eq) => {
             assert_eq!(eq.name, "x");
-            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Long(1)));
+            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(1)));
         }
         _ => panic!("Did not expect something else than Equation"),
     }
@@ -211,7 +315,33 @@ fn test_multiple_decls() {
     match &res.1[1].expr {
         Expr::Equation(eq) => {
             assert_eq!(eq.name, "y");
-            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Long(2)));
+            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(2)));
+        }
+        _ => panic!("Did not expect something else than Equation"),
+    }
+}
+
+#[test]
+fn test_table_literal() {
+    let res = parse_module(Span::new("x={a, b\n1, 2}"));
+
+    assert!(res.is_ok());
+
+    let res = res.unwrap();
+
+    match &res.1[0].expr {
+        Expr::Equation(eq) => {
+            assert_eq!(eq.name, "x");
+            assert_eq!(
+                eq.expr.expr,
+                Expr::DataSet(
+                    vec!["a".to_string(), "b".to_string()],
+                    vec![vec![
+                        Expr::Literal(Literal::Int64(1)),
+                        Expr::Literal(Literal::Int64(2))
+                    ]]
+                )
+            );
         }
         _ => panic!("Did not expect something else than Equation"),
     }
