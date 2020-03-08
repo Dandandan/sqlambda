@@ -10,3 +10,10 @@ edition = "2018"
 nom = "5"
 nom_locate = "*"
 im = "14"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "bench"
+harness = false
