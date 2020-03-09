@@ -187,7 +187,7 @@ pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
         },
     ))
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AnnotatedExpr<'a> {
     pub expr: Expr<'a>,
     /// Span has extra information about where expression
@@ -199,7 +199,7 @@ pub fn parse_module(i: Span) -> IResult<Span, Vec<AnnotatedExpr>> {
     many0(parse_decl)(i)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
@@ -215,20 +215,20 @@ pub enum Expr<'a> {
     DataSet(Vec<String>, Vec<Vec<Expr<'a>>>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LetIn<'a> {
     pub name: &'a str,
     pub expr1: Box<AnnotatedExpr<'a>>,
     pub expr2: Box<AnnotatedExpr<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Equation<'a> {
     pub name: &'a str,
     pub expr: Box<AnnotatedExpr<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Int64(i64),
     Int32(i32),

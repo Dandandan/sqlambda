@@ -8,6 +8,29 @@ pub enum Type {
     Dataset(Vec<String>, Vec<Type>),
 }
 
+fn get_item_types_inner(
+    items: &Vec<Vec<Expr>>,
+    index: usize,
+    env: &im::HashMap<String, Type>,
+) -> Type {
+    let values = items.into_iter().map(|y| y.get(index).unwrap().clone());
+
+    values
+        .map(|x| x.get_type(env).unwrap())
+        .collect::<Vec<Type>>()
+        .get(0)
+        .unwrap()
+        .clone()
+}
+
+fn get_item_types(items: &Vec<Vec<Expr>>, env: &im::HashMap<String, Type>) -> Vec<Type> {
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(i, _)| get_item_types_inner(items, i, env))
+        .collect()
+}
+
 impl<'a> Expr<'_> {
     pub fn get_type(&self, env: &im::HashMap<String, Type>) -> Result<Type, String> {
         match self {
@@ -21,7 +44,9 @@ impl<'a> Expr<'_> {
                 let type_env1 = env.update(x.name.to_string(), ty1);
                 x.expr2.expr.get_type(&type_env1)
             }
-            Expr::DataSet(names, items) => Ok(Type::Dataset(names.clone(), vec![Type::Float])),
+            Expr::DataSet(names, items) => {
+                Ok(Type::Dataset(names.clone(), get_item_types(items, env)))
+            }
             Expr::Equation(Equation { expr, .. }) => expr.expr.get_type(env), //_ => Err("unsupported".to_string()),
             _ => Err("not implemented".to_string()),
         }
