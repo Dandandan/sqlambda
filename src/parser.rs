@@ -160,7 +160,7 @@ pub fn expression(i: Span) -> IResult<Span, Expr> {
     alt((let_in_expr, table_literal, reference, float, int64, comment))(i)
 }
 
-pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
+pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
     let (_, pos) = position(i)?;
 
     let (i, name) = identifier(i)?;
@@ -175,16 +175,14 @@ pub fn parse_decl(i: Span) -> IResult<Span, AnnotatedExpr> {
 
     Ok((
         i,
-        AnnotatedExpr {
+        Decl::Equation(Equation {
+            name: &name.fragment(),
             span: pos,
-            expr: Expr::Equation(Equation {
-                name: &name.fragment(),
-                expr: Box::new(AnnotatedExpr {
-                    span: pos2,
-                    expr: expr,
-                }),
+            expr: Box::new(AnnotatedExpr {
+                span: pos2,
+                expr: expr,
             }),
-        },
+        }),
     ))
 }
 #[derive(Debug, PartialEq, Clone)]
@@ -195,14 +193,18 @@ pub struct AnnotatedExpr<'a> {
     span: Span<'a>,
 }
 
-pub fn parse_module(i: Span) -> IResult<Span, Vec<AnnotatedExpr>> {
+pub fn parse_module(i: Span) -> IResult<Span, Vec<Decl>> {
     many0(parse_decl)(i)
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expr<'a> {
+pub enum Decl<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr<'a> {
     /// Normal comment
     Comment(&'a str),
     /// Literal values
@@ -226,6 +228,7 @@ pub struct LetIn<'a> {
 pub struct Equation<'a> {
     pub name: &'a str,
     pub expr: Box<AnnotatedExpr<'a>>,
+    span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -239,18 +242,13 @@ pub enum Literal {
 fn test_parse_decl() {
     let res = parse_decl(Span::new("x=1"));
     assert!(res.is_ok());
-    let res = res.unwrap();
-    assert_eq!(res.1.span.location_offset(), 0);
-    assert_eq!(res.1.span.get_utf8_column(), 1);
+    let (_, Decl::Equation(eq)) = res.unwrap();
+    assert_eq!(eq.span.location_offset(), 0);
+    assert_eq!(eq.span.get_utf8_column(), 1);
 
-    match res.1.expr {
-        Expr::Equation(eq) => {
-            assert_eq!(eq.name, "x");
-            assert_eq!(eq.expr.span.location_offset(), 2);
-            assert_eq!(eq.expr.span.get_utf8_column(), 3);
-        }
-        _ => panic!("Did not expect something else than Equation"),
-    }
+    assert_eq!(eq.name, "x");
+    assert_eq!(eq.expr.span.location_offset(), 2);
+    assert_eq!(eq.expr.span.get_utf8_column(), 3);
 }
 
 #[test]
@@ -302,23 +300,16 @@ fn test_multiple_decls() {
 
     assert!(res.is_ok());
 
-    let res = res.unwrap();
+    let (_, vs) = res.unwrap();
+    let Decl::Equation(eq) = vs.get(0).unwrap();
 
-    match &res.1[0].expr {
-        Expr::Equation(eq) => {
-            assert_eq!(eq.name, "x");
-            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(1)));
-        }
-        _ => panic!("Did not expect something else than Equation"),
-    }
+    assert_eq!(eq.name, "x");
+    assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(1)));
 
-    match &res.1[1].expr {
-        Expr::Equation(eq) => {
-            assert_eq!(eq.name, "y");
-            assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(2)));
-        }
-        _ => panic!("Did not expect something else than Equation"),
-    }
+    let Decl::Equation(eq) = vs.get(1).unwrap();
+
+    assert_eq!(eq.name, "y");
+    assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(2)));
 }
 
 #[test]
@@ -327,22 +318,18 @@ fn test_table_literal() {
 
     assert!(res.is_ok());
 
-    let res = res.unwrap();
+    let (_, vs) = res.unwrap();
+    let Decl::Equation(eq) = vs.get(0).unwrap();
 
-    match &res.1[0].expr {
-        Expr::Equation(eq) => {
-            assert_eq!(eq.name, "x");
-            assert_eq!(
-                eq.expr.expr,
-                Expr::DataSet(
-                    vec!["a".to_string(), "b".to_string()],
-                    vec![vec![
-                        Expr::Literal(Literal::Int64(1)),
-                        Expr::Literal(Literal::Int64(2))
-                    ]]
-                )
-            );
-        }
-        _ => panic!("Did not expect something else than Equation"),
-    }
+    assert_eq!(eq.name, "x");
+    assert_eq!(
+        eq.expr.expr,
+        Expr::DataSet(
+            vec!["a".to_string(), "b".to_string()],
+            vec![vec![
+                Expr::Literal(Literal::Int64(1)),
+                Expr::Literal(Literal::Int64(2))
+            ]]
+        )
+    );
 }

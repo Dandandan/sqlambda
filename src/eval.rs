@@ -1,5 +1,37 @@
 use super::parser::{Expr, Literal};
 extern crate im;
+
+/// Runtime expression, optimized for compactness and use in interpretation
+/// Now uses variables, but can be optimized to using indexes, offsets, etc.
+pub enum RunExpr {
+    Ref(String),
+    LetIn(String, Box<RunExpr>, Box<RunExpr>),
+    Value(Literal),
+    DataSet(Vec<String>, Vec<Vec<RunExpr>>),
+}
+
+impl<'a> Expr<'a> {
+    pub fn to_expr(&self) -> RunExpr {
+        match self {
+            Expr::LetIn(x) => RunExpr::LetIn(
+                x.name.to_string(),
+                Box::new(x.expr1.expr.to_expr()),
+                Box::new(x.expr2.expr.to_expr()),
+            ),
+            Expr::Literal(l) => RunExpr::Value(l.to_owned()),
+            Expr::Ref(v) => RunExpr::Ref(v.to_string()),
+
+            Expr::DataSet(header, values) => RunExpr::DataSet(
+                header.clone(),
+                values
+                    .into_iter()
+                    .map(|v| v.into_iter().map(|x| x.to_expr()).collect())
+                    .collect(),
+            ),
+            _ => unimplemented!(),
+        }
+    }
+}
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Unit,
@@ -18,36 +50,24 @@ impl<'a> Literal {
         }
     }
 }
-
-impl<'a> Expr<'_> {
-    pub fn eval(&self, e: &im::HashMap<String, Value>) -> Result<Value, String> {
+impl RunExpr {
+    pub fn eval(&self, e: &im::HashMap<String, Value>) -> Value {
         match self {
-            Expr::Equation(_x) => {
-                unimplemented!();
-            }
-            Expr::Comment(_x) => {
-                unimplemented!();
-            }
-            Expr::LetIn(l) => {
-                let r = l.expr1.expr.eval(e)?;
-                let m = e.update(l.name.to_string(), r);
-                let res = l.expr2.as_ref().expr.eval(&m)?;
+            RunExpr::LetIn(name, expr1, expr2) => {
+                let r = expr1.eval(e);
+                let m = e.update(name.to_string(), r);
+                let res = expr2.eval(&m);
 
-                Ok(res)
+                res
             }
-            Expr::Ref(r) => {
-                let x = e.get(*r).ok_or(format!("Ref {} not found", r))?;
-                Ok(x.clone())
-            }
-            Expr::DataSet(header, values) => Ok(Value::DataSet(
-                header.clone(),
-                values
-                    .into_iter()
-                    .map(|y| y.into_iter().map(|x| x.eval(e).unwrap()).collect())
+            RunExpr::Ref(r) => e.get(r).unwrap().clone(),
+            RunExpr::Value(l) => l.to_value(),
+            RunExpr::DataSet(l, m) => Value::DataSet(
+                l.clone(),
+                m.into_iter()
+                    .map(|y| y.into_iter().map(|x| x.eval(e)).collect())
                     .collect(),
-            )),
-
-            Expr::Literal(l) => Ok(l.to_value()),
+            ),
         }
     }
 }

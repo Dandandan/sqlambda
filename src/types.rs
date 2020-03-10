@@ -1,4 +1,4 @@
-use super::parser::{Equation, Expr, Literal};
+use super::parser::{Expr, Literal};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Type {
@@ -47,7 +47,6 @@ impl<'a> Expr<'_> {
             Expr::DataSet(names, items) => {
                 Ok(Type::Dataset(names.clone(), get_item_types(items, env)))
             }
-            Expr::Equation(Equation { expr, .. }) => expr.expr.get_type(env), //_ => Err("unsupported".to_string()),
             _ => Err("not implemented".to_string()),
         }
     }
