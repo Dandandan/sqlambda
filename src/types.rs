@@ -44,9 +44,10 @@ impl<'a> Expr<'_> {
                 let type_env1 = env.update(x.name.to_string(), ty1);
                 x.expr2.expr.get_type(&type_env1)
             }
-            Expr::DataSet(names, items) => {
-                Ok(Type::Dataset(names.clone(), get_item_types(items, env)))
-            }
+            Expr::DataSet(names, items) => Ok(Type::Dataset(
+                names.iter().map(|x| x.to_string()).collect(),
+                get_item_types(items, env),
+            )),
             _ => Err("not implemented".to_string()),
         }
     }

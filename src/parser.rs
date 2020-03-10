@@ -39,10 +39,7 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
 
     Ok((
         i,
-        Expr::DataSet(
-            header.iter().map(|x| (*x.fragment()).to_string()).collect(),
-            rows,
-        ),
+        Expr::DataSet(header.iter().map(|x| (*x.fragment())).collect(), rows),
     ))
 }
 
@@ -152,9 +149,37 @@ fn reference(i: Span) -> IResult<Span, Expr> {
     Ok((i, Expr::Ref(&name.fragment())))
 }
 
+fn lambda(i: Span) -> IResult<Span, Expr> {
+    let (_, pos) = position(i)?;
+
+    let (i, _) = char('\\')(i)?;
+
+    let (i, name) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = tag("->")(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, expr) = expression(i)?;
+    Ok((
+        i,
+        Expr::Lambda(name.fragment(), Box::new(AnnotatedExpr { span: pos, expr })),
+    ))
+}
+
 pub fn expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = multispace0(i)?;
-    alt((let_in_expr, table_literal, reference, float, int64, comment))(i)
+    alt((
+        let_in_expr,
+        table_literal,
+        lambda,
+        reference,
+        float,
+        int64,
+        comment,
+    ))(i)
 }
 
 pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
@@ -207,8 +232,10 @@ pub enum Expr<'a> {
     Ref(&'a str),
     // Let in expression
     LetIn(LetIn<'a>),
-    // Data set
-    DataSet(Vec<String>, Vec<Vec<Expr<'a>>>),
+    // DataSet expressions
+    DataSet(Vec<&'a str>, Vec<Vec<Expr<'a>>>),
+    // Lambda
+    Lambda(&'a str, Box<AnnotatedExpr<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -319,7 +346,7 @@ fn test_table_literal() {
     assert_eq!(
         eq.expr.expr,
         Expr::DataSet(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["a", "b"],
             vec![vec![
                 Expr::Literal(Literal::Int64(1)),
                 Expr::Literal(Literal::Int64(2))

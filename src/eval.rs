@@ -22,7 +22,7 @@ impl<'a> Expr<'a> {
             Expr::Ref(v) => RunExpr::Ref(v.to_string()),
 
             Expr::DataSet(header, values) => RunExpr::DataSet(
-                header.clone(),
+                header.iter().map(|x| x.to_string()).collect(),
                 values
                     .iter()
                     .map(|v| v.iter().map(|x| x.to_run_expr()).collect())
