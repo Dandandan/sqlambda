@@ -11,12 +11,12 @@ pub enum RunExpr {
 }
 
 impl<'a> Expr<'a> {
-    pub fn to_expr(&self) -> RunExpr {
+    pub fn to_run_expr(&self) -> RunExpr {
         match self {
             Expr::LetIn(x) => RunExpr::LetIn(
                 x.name.to_string(),
-                Box::new(x.expr1.expr.to_expr()),
-                Box::new(x.expr2.expr.to_expr()),
+                Box::new(x.expr1.expr.to_run_expr()),
+                Box::new(x.expr2.expr.to_run_expr()),
             ),
             Expr::Literal(l) => RunExpr::Value(l.to_owned()),
             Expr::Ref(v) => RunExpr::Ref(v.to_string()),
@@ -25,7 +25,7 @@ impl<'a> Expr<'a> {
                 header.clone(),
                 values
                     .into_iter()
-                    .map(|v| v.into_iter().map(|x| x.to_expr()).collect())
+                    .map(|v| v.into_iter().map(|x| x.to_run_expr()).collect())
                     .collect(),
             ),
             _ => unimplemented!(),

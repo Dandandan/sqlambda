@@ -16,7 +16,7 @@ pub fn exec(s: &str, type_env: &im::HashMap<String, Type>, env: &im::HashMap<Str
             let ty = exp.get_type(type_env);
             match ty {
                 Ok(ty) => {
-                    let res = exp.to_expr().eval(env);
+                    let res = exp.to_run_expr().eval(env);
                     println!("{:} : {:?}", res, ty);
                 }
                 Err(err) => {
@@ -39,7 +39,7 @@ fn load_module<B>(
         for Decl::Equation(Equation { expr, name, .. }) in b {
             if let Ok(ty) = expr.expr.get_type(&type_env) {
                 type_env = type_env.update(name.to_string(), ty);
-                env = env.update(name.to_string(), expr.expr.to_expr().eval(&env));
+                env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
             }
         }
     }
