@@ -24,8 +24,8 @@ impl<'a> Expr<'a> {
             Expr::DataSet(header, values) => RunExpr::DataSet(
                 header.clone(),
                 values
-                    .into_iter()
-                    .map(|v| v.into_iter().map(|x| x.to_run_expr()).collect())
+                    .iter()
+                    .map(|v| v.iter().map(|x| x.to_run_expr()).collect())
                     .collect(),
             ),
             _ => unimplemented!(),
@@ -56,16 +56,14 @@ impl RunExpr {
             RunExpr::LetIn(name, expr1, expr2) => {
                 let r = expr1.eval(e);
                 let m = e.update(name.to_string(), r);
-                let res = expr2.eval(&m);
-
-                res
+                expr2.eval(&m)
             }
             RunExpr::Ref(r) => e.get(r).unwrap().clone(),
             RunExpr::Value(l) => l.to_value(),
             RunExpr::DataSet(l, m) => Value::DataSet(
                 l.clone(),
-                m.into_iter()
-                    .map(|y| y.into_iter().map(|x| x.eval(e)).collect())
+                m.iter()
+                    .map(|y| y.iter().map(|x| x.eval(e)).collect())
                     .collect(),
             ),
         }

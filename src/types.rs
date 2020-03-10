@@ -9,11 +9,11 @@ pub enum Type {
 }
 
 fn get_item_types_inner(
-    items: &Vec<Vec<Expr>>,
+    items: &[Vec<Expr>],
     index: usize,
     env: &im::HashMap<String, Type>,
 ) -> Type {
-    let values = items.into_iter().map(|y| y.get(index).unwrap().clone());
+    let values = items.iter().map(|y| y.get(index).unwrap().clone());
 
     values
         .map(|x| x.get_type(env).unwrap())
@@ -23,9 +23,9 @@ fn get_item_types_inner(
         .clone()
 }
 
-fn get_item_types(items: &Vec<Vec<Expr>>, env: &im::HashMap<String, Type>) -> Vec<Type> {
+fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Type>) -> Vec<Type> {
     items
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, _)| get_item_types_inner(items, i, env))
         .collect()
@@ -37,7 +37,7 @@ impl<'a> Expr<'_> {
             Expr::Literal(l) => Ok(l.get_type()),
             Expr::Ref(x) => {
                 let err = format!("Could not find reference {}", x);
-                env.get(*x).map(|x| x.clone()).ok_or(err)
+                env.get(*x).cloned().ok_or(err)
             }
             Expr::LetIn(x) => {
                 let ty1 = x.expr1.expr.get_type(env)?;

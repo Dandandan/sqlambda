@@ -33,20 +33,17 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
     let (i, _) = space0(i)?;
 
     let (i, s) = opt(separated_list(pair(char('\n'), space0), table_row))(i)?;
-    let rows = s.unwrap_or(vec![]);
+    let rows = s.unwrap_or_else(|| vec![]);
 
     let (i, _) = tag("}")(i)?;
 
-    return Ok((
+    Ok((
         i,
         Expr::DataSet(
-            header
-                .into_iter()
-                .map(|x| x.fragment().to_string())
-                .collect(),
-            rows.into_iter().map(|x| x).collect(),
+            header.iter().map(|x| (*x.fragment()).to_string()).collect(),
+            rows,
         ),
-    ));
+    ))
 }
 
 fn let_in_expr(input: Span) -> IResult<Span, Expr> {
@@ -126,7 +123,7 @@ fn digit<T: std::str::FromStr>(i: Span, f: fn(T) -> Literal) -> IResult<Span, Ex
 }
 
 fn int64(i: Span) -> IResult<Span, Expr> {
-    return digit(i, Literal::Int64);
+    digit(i, Literal::Int64)
 }
 
 fn float(input: Span) -> IResult<Span, Expr> {
@@ -178,10 +175,7 @@ pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
         Decl::Equation(Equation {
             name: &name.fragment(),
             span: pos,
-            expr: Box::new(AnnotatedExpr {
-                span: pos2,
-                expr: expr,
-            }),
+            expr: Box::new(AnnotatedExpr { span: pos2, expr }),
         }),
     ))
 }
