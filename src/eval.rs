@@ -1,13 +1,16 @@
 use super::parser::{Expr, Literal};
 extern crate im;
 
-/// Runtime expression, optimized for compactness and use in interpretation
+/// Runtime expression, optimized for compactness and use in interpreter
 /// Now uses variables, but can be optimized to using indexes, offsets, etc.
+///
+#[derive(Debug, PartialEq, Clone)]
 pub enum RunExpr {
     Ref(String),
     LetIn(String, Box<RunExpr>, Box<RunExpr>),
     Value(Literal),
     DataSet(Vec<String>, Vec<Vec<RunExpr>>),
+    FnClosure(String, Box<RunExpr>),
 }
 
 impl<'a> Expr<'a> {
@@ -28,6 +31,9 @@ impl<'a> Expr<'a> {
                     .map(|v| v.iter().map(|x| x.to_run_expr()).collect())
                     .collect(),
             ),
+            Expr::Lambda(name, y) => {
+                RunExpr::FnClosure(name.to_string(), Box::new(y.expr.to_run_expr()))
+            }
             _ => unimplemented!(),
         }
     }
@@ -39,6 +45,7 @@ pub enum Value {
     Int64(i64),
     Int32(i32),
     DataSet(Vec<String>, Vec<Vec<Value>>),
+    FnClosure(String, Box<RunExpr>),
 }
 
 impl<'a> Literal {
@@ -66,6 +73,7 @@ impl RunExpr {
                     .map(|y| y.iter().map(|x| x.eval(e)).collect())
                     .collect(),
             ),
+            RunExpr::FnClosure(name, expr) => Value::FnClosure(name.to_string(), expr.clone()),
         }
     }
 }

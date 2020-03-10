@@ -1,5 +1,7 @@
 use super::eval::Value;
 use super::parser::{Expr, Literal};
+use super::types::Type;
+
 use std::fmt;
 
 impl<'a> fmt::Display for Expr<'a> {
@@ -20,6 +22,16 @@ impl fmt::Display for Literal {
         }
     }
 }
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::TyVar(i) => write!(f, "{}", i),
+            Type::TyArr(ty1, ty2) => write!(f, "{} -> {}", ty1, ty2),
+            t => write!(f, "{:?}", t),
+        }
+    }
+}
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -28,6 +40,7 @@ impl fmt::Display for Value {
             Value::Float(i) => write!(f, "{}", i),
             Value::DataSet(i, values) => write!(f, "{:?} {:?}", i, values),
             Value::Unit => write!(f, "()"),
+            Value::FnClosure(_, _) => write!(f, "fun"),
         }
     }
 }

@@ -6,6 +6,10 @@ pub enum Type {
     Int32,
     Float,
     Dataset(Vec<String>, Vec<Type>),
+    /// T -> U
+    TyArr(Box<Type>, Box<Type>),
+    /// Type variable
+    TyVar(String),
 }
 
 fn get_item_types_inner(
@@ -16,7 +20,8 @@ fn get_item_types_inner(
     let values = items.iter().map(|y| y.get(index).unwrap().clone());
 
     values
-        .map(|x| x.get_type(env).unwrap())
+        .map(|x| x.get_type(env).unwrap().1)
+        // TODO collect substitions
         .collect::<Vec<Type>>()
         .get(0)
         .unwrap()
@@ -31,23 +36,45 @@ fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Type>) -> Vec<T
         .collect()
 }
 
+type TypeRes = (im::HashMap<String, Type>, Type);
+
+fn apply_sub(subs: &im::HashMap<String, Type>, ty: &Type) -> Type {
+    match ty {
+        Type::TyVar(name) => subs.get(name).unwrap_or(&ty.clone()).clone(),
+        _ => ty.clone(),
+    }
+}
+
+// Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
 impl<'a> Expr<'_> {
-    pub fn get_type(&self, env: &im::HashMap<String, Type>) -> Result<Type, String> {
+    pub fn get_type(&self, env: &im::HashMap<String, Type>) -> Result<TypeRes, String> {
         match self {
-            Expr::Literal(l) => Ok(l.get_type()),
+            Expr::Literal(l) => Ok((im::HashMap::new(), l.get_type())),
             Expr::Ref(x) => {
                 let err = format!("Could not find reference {}", x);
-                env.get(*x).cloned().ok_or(err)
+                let ty = env.get(*x).cloned().ok_or(err)?;
+                Ok((im::HashMap::new(), ty))
             }
             Expr::LetIn(x) => {
-                let ty1 = x.expr1.expr.get_type(env)?;
-                let type_env1 = env.update(x.name.to_string(), ty1);
+                // TODO implement
+                let (sub, ty) = x.expr1.expr.get_type(env)?;
+                let type_env1 = env.update(x.name.to_string(), ty);
                 x.expr2.expr.get_type(&type_env1)
             }
-            Expr::DataSet(names, items) => Ok(Type::Dataset(
-                names.iter().map(|x| x.to_string()).collect(),
-                get_item_types(items, env),
+            Expr::DataSet(names, items) => Ok((
+                im::HashMap::new(),
+                Type::Dataset(
+                    names.iter().map(|x| x.to_string()).collect(),
+                    get_item_types(items, env),
+                ),
             )),
+            Expr::Lambda(name, expr) => {
+                let type_var = Type::TyVar("x".to_string()); //fresh();
+                let env1 = env.update(name.to_string(), type_var.clone());
+                let (sub, t1) = expr.expr.get_type(&env1)?;
+                let substituted = apply_sub(&sub, &type_var);
+                Ok((sub, Type::TyArr(Box::new(substituted), Box::new(t1))))
+            }
             _ => Err("not implemented".to_string()),
         }
     }
