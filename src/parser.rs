@@ -307,6 +307,22 @@ fn test_parse_float_whitespace() {
 }
 
 #[test]
+fn test_lambda() {
+    let res = expression(Span::new("\\x -> y"));
+
+    if let Expr::Lambda(name, expr) = res.unwrap().1 {
+        assert_eq!(name, "x");
+        if let Expr::Ref(name) = expr.expr {
+            assert_eq!(name, "y");
+        } else {
+            panic!("Did not expect non-ref")
+        }
+    } else {
+        panic!("Did not expect non-lambda")
+    }
+}
+
+#[test]
 fn test_parse_comment() {
     let res = expression(Span::new("--comment\n"));
 
