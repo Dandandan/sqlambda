@@ -1,4 +1,4 @@
-use super::parser::{expression, Expr, Literal, Span};
+use super::parser::{Expr, Literal};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Type {
@@ -87,7 +87,12 @@ fn ftv_ty(ty: &Type) -> std::collections::HashSet<String> {
 }
 
 fn ftv_env(env: &im::HashMap<String, Scheme>) -> std::collections::HashSet<String> {
-    std::collections::HashSet::new()
+    let x = env.values().map(|x| ftv_ty(&x.1));
+    let mut j = std::collections::HashSet::new();
+    for y in x {
+        j = j.union(&y).cloned().collect()
+    }
+    j
 }
 
 fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
@@ -142,6 +147,8 @@ impl Literal {
         }
     }
 }
+#[cfg(test)]
+use super::parser::{expression, Span};
 
 #[test]
 fn test_type() {
