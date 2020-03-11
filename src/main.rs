@@ -48,12 +48,9 @@ fn load_module<B>(
 }
 
 fn main() -> io::Result<()> {
-    let mut file = File::open("base.sqla")?;
+    let file = include_str!("base.sqla");
 
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let module = parser::parse_module(parser::Span::new(&contents));
+    let module = parser::parse_module(parser::Span::new(&file));
 
     println!("Ok, modules loaded");
     let (type_env, env) = load_module(module);
