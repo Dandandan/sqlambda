@@ -9,6 +9,7 @@ use nom::character::complete::{alpha1, char, digit0, digit1, multispace0, space0
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
+    character::complete::line_ending,
     combinator::opt,
     multi::{many0, separated_list},
     sequence::pair,
@@ -31,8 +32,10 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
     let (i, header) = separated_list(pair(char(','), space0), identifier)(i)?;
 
     let (i, _) = space0(i)?;
+    let (i, _) = line_ending(i)?;
 
-    let (i, s) = opt(separated_list(pair(char('\n'), space0), table_row))(i)?;
+    let (i, s) = opt(separated_list(pair(line_ending, space0), table_row))(i)?;
+
     let rows = s.unwrap_or_else(|| vec![]);
 
     let (i, _) = tag("}")(i)?;
@@ -102,7 +105,7 @@ fn comment(input: Span) -> IResult<Span, Expr> {
 fn identifier(i: Span) -> IResult<Span, Span> {
     let (i, id) = alpha1(i)?;
     // reserved key words
-    if id.fragment() == &"let" {
+    if id.fragment() == &"let" || id.fragment() == &"in" || id.fragment() == &"=" {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
@@ -169,8 +172,8 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
     ))
 }
 
-pub fn expression(i: Span) -> IResult<Span, Expr> {
-    let (i, _) = multispace0(i)?;
+pub fn one_expression(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = space0(i)?;
     alt((
         let_in_expr,
         table_literal,
@@ -180,6 +183,15 @@ pub fn expression(i: Span) -> IResult<Span, Expr> {
         int64,
         comment,
     ))(i)
+}
+
+pub fn expression(i: Span) -> IResult<Span, Expr> {
+    let (i, expr) = one_expression(i)?;
+    let (i2, expr2) = opt(one_expression)(i)?;
+    match expr2 {
+        None => Ok((i, expr)),
+        Some(expr2) => Ok((i2, Expr::App(Box::new(expr), Box::new(expr2)))),
+    }
 }
 
 pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
@@ -236,6 +248,8 @@ pub enum Expr<'a> {
     DataSet(Vec<&'a str>, Vec<Vec<Expr<'a>>>),
     // Lambda
     Lambda(&'a str, Box<AnnotatedExpr<'a>>),
+    // Application
+    App(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -332,6 +346,21 @@ fn test_parse_comment() {
 }
 
 #[test]
+fn test_app() {
+    let res = expression(Span::new("f 1"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(
+        res.unwrap().1,
+        Expr::App(
+            Box::new(Expr::Ref("f")),
+            Box::new(Expr::Literal(Literal::Int64(1)))
+        )
+    )
+}
+
+#[test]
 fn test_multiple_decls() {
     let res = parse_module(Span::new("x=1\ny=2"));
 
@@ -354,7 +383,7 @@ fn test_table_literal() {
     let res = parse_module(Span::new("x={a, b\n1, 2}"));
 
     assert!(res.is_ok());
-
+    println!("{:?}", res);
     let (_, vs) = res.unwrap();
     let Decl::Equation(eq) = vs.get(0).unwrap();
 
