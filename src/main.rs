@@ -1,6 +1,4 @@
-use std::fs::File;
 use std::io;
-use std::io::prelude::*;
 mod display;
 mod eval;
 mod parser;
@@ -8,9 +6,9 @@ mod types;
 use eval::Value;
 use parser::{Decl, Equation, Span};
 use std::io::stdin;
-use types::Type;
+use types::Scheme;
 
-pub fn exec(s: &str, type_env: &im::HashMap<String, Type>, env: &im::HashMap<String, Value>) {
+pub fn exec(s: &str, type_env: &im::HashMap<String, Scheme>, env: &im::HashMap<String, Value>) {
     match parser::expression(parser::Span::new(&s)) {
         Ok((_i, exp)) => {
             let ty = exp.get_type(type_env);
@@ -32,13 +30,13 @@ pub fn exec(s: &str, type_env: &im::HashMap<String, Type>, env: &im::HashMap<Str
 
 fn load_module<B>(
     module: Result<(Span<'_>, Vec<Decl>), B>,
-) -> (im::HashMap<String, Type>, im::HashMap<String, Value>) {
+) -> (im::HashMap<String, Scheme>, im::HashMap<String, Value>) {
     let mut type_env = im::HashMap::new();
     let mut env: im::HashMap<String, Value> = im::HashMap::new();
     if let Ok((_, b)) = module {
         for Decl::Equation(Equation { expr, name, .. }) in b {
             if let Ok(ty) = expr.expr.get_type(&type_env) {
-                type_env = type_env.update(name.to_string(), ty.1);
+                type_env = type_env.update(name.to_string(), (vec![], ty.1));
                 env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
             }
         }

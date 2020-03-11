@@ -15,7 +15,7 @@ pub enum Type {
 fn get_item_types_inner(
     items: &[Vec<Expr>],
     index: usize,
-    env: &im::HashMap<String, Type>,
+    env: &im::HashMap<String, Scheme>,
 ) -> Type {
     let values = items.iter().map(|y| y.get(index).unwrap().clone());
 
@@ -28,7 +28,12 @@ fn get_item_types_inner(
         .clone()
 }
 
-fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Type>) -> Vec<Type> {
+static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+fn get_id() -> usize {
+    COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Scheme>) -> Vec<Type> {
     items
         .iter()
         .enumerate()
@@ -36,48 +41,77 @@ fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Type>) -> Vec<T
         .collect()
 }
 
-type TypeRes = (im::HashMap<String, Type>, Type);
+type TypeRes<'a> = (im::HashMap<String, Type>, Type);
 
-type Scheme = (Vec<String>, Type);
+pub type Scheme = (Vec<String>, Type);
 
-fn apply_sub_type(subs: &im::HashMap<String, Type>, ty: &Type) -> Type {
+type Subs<'a> = &'a im::HashMap<String, Type>;
+
+fn apply_sub_type(subs: Subs, ty: &Type) -> Type {
     match ty {
         Type::TyVar(name) => subs.get(name).unwrap_or(&ty.clone()).clone(),
         _ => ty.clone(),
     }
 }
 
+fn apply_sub_scheme(subs: Subs, scheme: Scheme) -> Scheme {
+    let mut subs1 = subs.clone();
+    for key in scheme.0.clone().into_iter() {
+        subs1 = subs1.alter(|_x| Option::None, key);
+    }
+    let ty = apply_sub_type(&subs1, &scheme.1);
+    (scheme.0.clone(), ty)
+}
 fn apply_sub_env(
     subs: &im::HashMap<String, Type>,
-    env: &im::HashMap<String, Type>,
-) -> im::HashMap<String, Type> {
+    env: &im::HashMap<String, Scheme>,
+) -> im::HashMap<String, Scheme> {
     let mut h = im::HashMap::new();
     for (key, value) in env.into_iter() {
-        h = h.update(key.to_string(), apply_sub_type(subs, value));
+        h = h.update(key.to_string(), apply_sub_scheme(subs, value.clone()));
     }
     h
 }
 
-fn generalize(env: im::HashMap<String, Type>, ty: Type) -> Scheme {
-    unimplemented!()
+fn ftv_ty(ty: &Type) -> std::collections::HashSet<String> {
+    match ty {
+        Type::TyVar(a) => [a].iter().cloned().cloned().collect(),
+        Type::TyArr(ty1, ty2) => {
+            let x = ftv_ty(ty1);
+            let y = ftv_ty(ty2);
+            x.union(&y).cloned().collect()
+        }
+
+        _ => std::collections::HashSet::new(),
+    }
+}
+
+fn ftv_env(env: &im::HashMap<String, Scheme>) -> std::collections::HashSet<String> {
+    std::collections::HashSet::new()
+}
+
+fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
+    let xs = ftv_ty(ty);
+    let ys = ftv_env(env);
+    let a = xs.difference(&ys).cloned().collect::<Vec<String>>();
+    (a, ty.clone())
 }
 
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
 impl<'a> Expr<'_> {
-    pub fn get_type(&self, env: &im::HashMap<String, Type>) -> Result<TypeRes, String> {
+    pub fn get_type(&self, env: &im::HashMap<String, Scheme>) -> Result<TypeRes, String> {
         match self {
             Expr::Literal(l) => Ok((im::HashMap::new(), l.get_type())),
             Expr::Ref(x) => {
                 let err = format!("Could not find reference {}", x);
                 let ty = env.get(*x).cloned().ok_or(err)?;
-                Ok((im::HashMap::new(), ty))
+                Ok((im::HashMap::new(), ty.1))
             }
             Expr::LetIn(x) => {
-                // TODO implement
                 let (sub, ty) = x.expr1.expr.get_type(env)?;
                 let env = apply_sub_env(&sub, env);
-                //let n_ty = generalize(sub, ty.clone());
-                let type_env1 = env.update(x.name.to_string(), ty);
+                let n_ty = generalize(&env, &ty);
+                let type_env1 = env.update(x.name.to_string(), n_ty);
                 x.expr2.expr.get_type(&type_env1)
             }
             Expr::DataSet(names, items) => Ok((
@@ -88,8 +122,8 @@ impl<'a> Expr<'_> {
                 ),
             )),
             Expr::Lambda(name, expr) => {
-                let type_var = Type::TyVar("x".to_string()); //fresh();
-                let env1 = env.update(name.to_string(), type_var.clone());
+                let type_var = Type::TyVar(get_id().to_string()); //fresh();
+                let env1 = env.update(name.to_string(), (vec![], type_var.clone()));
                 let (sub, t1) = expr.expr.get_type(&env1)?;
                 let substituted = apply_sub_type(&sub, &type_var);
                 Ok((sub, Type::TyArr(Box::new(substituted), Box::new(t1))))

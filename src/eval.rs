@@ -82,7 +82,7 @@ impl RunExpr {
 #[test]
 fn test_eval() {
     assert_eq!(
-        Expr::Literal(Literal::Int64(1)),
-        Expr::Literal(Literal::Int64(1))
+        RunExpr::Value(Literal::Int64(1)).eval(&im::HashMap::new()),
+        Value::Int64(1)
     );
 }
