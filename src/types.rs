@@ -60,7 +60,7 @@ fn apply_sub_scheme(subs: Subs, scheme: Scheme) -> Scheme {
         subs1 = subs1.alter(|_x| Option::None, key);
     }
     let ty = apply_sub_type(&subs1, &scheme.1);
-    (scheme.0.clone(), ty)
+    (scheme.0, ty)
 }
 fn apply_sub_env(
     subs: &im::HashMap<String, Type>,
@@ -71,6 +71,14 @@ fn apply_sub_env(
         h = h.update(key.to_string(), apply_sub_scheme(subs, value.clone()));
     }
     h
+}
+
+fn compose(subs: Subs, subs2: Subs) -> im::HashMap<String, Type> {
+    let mut h = im::HashMap::new();
+    for (key, value) in subs.into_iter() {
+        h = h.update(key.to_string(), apply_sub_type(subs, &value.clone()));
+    }
+    h.union(subs2.clone())
 }
 
 fn ftv_ty(ty: &Type) -> std::collections::HashSet<String> {
@@ -113,16 +121,17 @@ impl<'a> Expr<'_> {
                 Ok((im::HashMap::new(), ty.1))
             }
             Expr::LetIn(x) => {
-                let (sub, ty) = x.expr1.expr.get_type(env)?;
-                let env = apply_sub_env(&sub, env);
-                let n_ty = generalize(&env, &ty);
-                let type_env1 = env.update(x.name.to_string(), n_ty);
-                x.expr2.expr.get_type(&type_env1)
+                let (s1, t1) = x.expr1.expr.get_type(env)?;
+                let env1 = apply_sub_env(&s1, env);
+                let t2 = generalize(&env1, &t1);
+                let extended_ty = env.update(x.name.to_string(), t2);
+                let (s2, t2) = x.expr2.expr.get_type(&extended_ty)?;
+                Ok((compose(&s1, &s2), t2))
             }
             Expr::DataSet(names, items) => Ok((
                 im::HashMap::new(),
                 Type::Dataset(
-                    names.iter().map(|x| x.to_string()).collect(),
+                    names.iter().map(|x| (*x).to_string()).collect(),
                     get_item_types(items, env),
                 ),
             )),

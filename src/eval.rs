@@ -22,17 +22,17 @@ impl<'a> Expr<'a> {
                 Box::new(x.expr2.expr.to_run_expr()),
             ),
             Expr::Literal(l) => RunExpr::Value(l.to_owned()),
-            Expr::Ref(v) => RunExpr::Ref(v.to_string()),
+            Expr::Ref(v) => RunExpr::Ref((*v).to_string()),
 
             Expr::DataSet(header, values) => RunExpr::DataSet(
-                header.iter().map(|x| x.to_string()).collect(),
+                header.iter().map(|x| (*x).to_string()).collect(),
                 values
                     .iter()
                     .map(|v| v.iter().map(|x| x.to_run_expr()).collect())
                     .collect(),
             ),
             Expr::Lambda(name, y) => {
-                RunExpr::FnClosure(name.to_string(), Box::new(y.expr.to_run_expr()))
+                RunExpr::FnClosure((*name).to_string(), Box::new(y.expr.to_run_expr()))
             }
             _ => unimplemented!(),
         }
