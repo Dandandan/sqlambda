@@ -33,7 +33,9 @@ fn load_module<B>(
 ) -> (im::HashMap<String, Scheme>, im::HashMap<String, Value>) {
     let mut type_env = im::HashMap::new();
     let mut env: im::HashMap<String, Value> = im::HashMap::new();
+
     if let Ok((_, b)) = module {
+        println!("{:?}xxx", b);
         for Decl::Equation(Equation { expr, name, .. }) in b {
             if let Ok(ty) = expr.expr.get_type(&type_env) {
                 type_env = type_env.update(name.to_string(), (vec![], ty.1));

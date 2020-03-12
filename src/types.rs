@@ -95,10 +95,12 @@ fn ftv_ty(ty: &Type) -> std::collections::HashSet<String> {
 }
 
 fn ftv_env(env: &im::HashMap<String, Scheme>) -> std::collections::HashSet<String> {
-    let x = env.values().map(|x| ftv_ty(&x.1));
+    let ftvs = env.values().map(|x| ftv_ty(&x.1));
     let mut j = std::collections::HashSet::new();
-    for y in x {
-        j = j.union(&y).cloned().collect()
+    for y in ftvs {
+        for z in y {
+            j.insert(z);
+        }
     }
     j
 }
@@ -108,6 +110,10 @@ fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
     let ys = ftv_env(env);
     let a = xs.difference(&ys).cloned().collect::<Vec<String>>();
     (a, ty.clone())
+}
+
+fn unify<'a>(ty1: Type, ty2: Type) -> Result<TypeRes<'a>, String> {
+    unimplemented!("help");
 }
 
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
@@ -141,6 +147,17 @@ impl<'a> Expr<'_> {
                 let (sub, t1) = expr.expr.get_type(&env1)?;
                 let substituted = apply_sub_type(&sub, &type_var);
                 Ok((sub, Type::TyArr(Box::new(substituted), Box::new(t1))))
+            }
+            Expr::App(expr1, expr2) => {
+                let tv = Type::TyVar(get_id().to_string());
+
+                let (s1, t1) = expr1.get_type(env)?;
+                let (s2, t2) = expr2.get_type(&apply_sub_env(&s1, env))?;
+                let (s3, _) = unify(
+                    apply_sub_type(&s2, &t1),
+                    Type::TyArr(Box::new(t2), Box::new(tv.clone())),
+                )?;
+                Ok((compose(&compose(&s3, &s2), &s2), apply_sub_type(&s3, &tv)))
             }
             x => Err(format!("not implemented {:?}", x)),
         }
