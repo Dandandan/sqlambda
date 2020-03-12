@@ -128,7 +128,7 @@ fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
 //          | occursCheck a t = throwError $ InfiniteType a t
 //          | otherwise       = return $ Map.singleton a t
 
-fn unify<'a>(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> {
+fn unify(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> {
     match (ty1, ty2) {
         (Type::TyArr(l, r), Type::TyArr(l1, r1)) => {
             let s1 = unify(*l, *l1)?;
@@ -138,8 +138,13 @@ fn unify<'a>(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> 
         }
         (Type::TyVar(a), t) => bind(&a, &t),
         (t, Type::TyVar(a)) => bind(&a, &t),
-
-        _ => unimplemented!("xxx"),
+        (t1, t2) => {
+            if t1 == t2 {
+                Ok(im::HashMap::new())
+            } else {
+                Err("".to_string())
+            }
+        }
     }
 }
 
@@ -153,7 +158,7 @@ fn bind(var: &str, ty: &Type) -> Result<im::HashMap<String, Type>, String> {
         return Err("Infinite Type".to_string());
     }
 
-    return Ok(im::HashMap::new().update(var.to_string(), ty.clone()));
+    Ok(im::HashMap::new().update(var.to_string(), ty.clone()))
 }
 
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
@@ -183,7 +188,7 @@ impl<'a> Expr<'_> {
             )),
             Expr::Lambda(name, expr) => {
                 let type_var = Type::TyVar(get_id().to_string()); //fresh();
-                let env1 = env.update(name.to_string(), (vec![], type_var.clone()));
+                let env1 = env.update((*name).to_string(), (vec![], type_var.clone()));
                 let (sub, t1) = expr.expr.get_type(&env1)?;
                 let substituted = apply_sub_type(&sub, &type_var);
                 Ok((sub, Type::TyArr(Box::new(substituted), Box::new(t1))))

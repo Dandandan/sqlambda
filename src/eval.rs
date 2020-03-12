@@ -86,7 +86,7 @@ impl RunExpr {
                     Value::FnClosure(x, body, clo) => {
                         let argv = arg.eval(e);
                         let nenv = clo.update(x, argv);
-                        return body.eval(&nenv);
+                        body.eval(&nenv)
                     }
                     _ => {
                         unimplemented!("xx");
