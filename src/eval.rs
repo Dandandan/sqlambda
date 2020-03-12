@@ -10,7 +10,8 @@ pub enum RunExpr {
     LetIn(String, Box<RunExpr>, Box<RunExpr>),
     Value(Literal),
     DataSet(Vec<String>, Vec<Vec<RunExpr>>),
-    FnClosure(String, Box<RunExpr>),
+    Lambda(String, Box<RunExpr>),
+    App(Box<RunExpr>, Box<RunExpr>),
 }
 
 impl<'a> Expr<'a> {
@@ -32,7 +33,10 @@ impl<'a> Expr<'a> {
                     .collect(),
             ),
             Expr::Lambda(name, y) => {
-                RunExpr::FnClosure((*name).to_string(), Box::new(y.expr.to_run_expr()))
+                RunExpr::Lambda((*name).to_string(), Box::new(y.expr.to_run_expr()))
+            }
+            Expr::App(e1, e2) => {
+                RunExpr::App(Box::new((*e1).to_run_expr()), Box::new((*e2).to_run_expr()))
             }
             _ => unimplemented!(),
         }
@@ -45,7 +49,7 @@ pub enum Value {
     Int64(i64),
     Int32(i32),
     DataSet(Vec<String>, Vec<Vec<Value>>),
-    FnClosure(String, Box<RunExpr>),
+    FnClosure(String, Box<RunExpr>, im::HashMap<String, Value>),
 }
 
 impl<'a> Literal {
@@ -73,7 +77,22 @@ impl RunExpr {
                     .map(|y| y.iter().map(|x| x.eval(e)).collect())
                     .collect(),
             ),
-            RunExpr::FnClosure(name, expr) => Value::FnClosure(name.to_string(), expr.clone()),
+            RunExpr::Lambda(name, expr) => {
+                Value::FnClosure(name.to_string(), expr.clone(), e.clone())
+            }
+            RunExpr::App(e1, arg) => {
+                let x = e1.eval(e);
+                match x {
+                    Value::FnClosure(x, body, clo) => {
+                        let argv = arg.eval(e);
+                        let nenv = clo.update(x, argv);
+                        return body.eval(&nenv);
+                    }
+                    _ => {
+                        unimplemented!("xx");
+                    }
+                }
+            }
         }
     }
 }

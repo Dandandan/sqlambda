@@ -40,7 +40,7 @@ impl fmt::Display for Value {
             Value::Float(i) => write!(f, "{}", i),
             Value::DataSet(i, values) => write!(f, "{:?} {:?}", i, values),
             Value::Unit => write!(f, "()"),
-            Value::FnClosure(_, _) => write!(f, "fun"),
+            Value::FnClosure(_, _, _) => write!(f, "fun"),
         }
     }
 }

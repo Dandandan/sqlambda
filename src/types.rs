@@ -112,8 +112,48 @@ fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
     (a, ty.clone())
 }
 
-fn unify<'a>(ty1: Type, ty2: Type) -> Result<TypeRes<'a>, String> {
-    unimplemented!("help");
+// unify ::  Type -> Type -> Infer Subst
+// unify (l `TArr` r) (l' `TArr` r')  = do
+//     s1 <- unify l l'
+//     s2 <- unify (apply s1 r) (apply s1 r')
+//     return (s2 `compose` s1)
+
+// unify (TVar a) t = bind a t
+// unify t (TVar a) = bind a t
+// unify (TCon a) (TCon b) | a == b = return nullSubst
+// unify t1 t2 = throwError $ UnificationFail t1 t2
+
+// bind ::  TVar -> Type -> Infer Subst
+// bind a t | t == TVar a     = return nullSubst
+//          | occursCheck a t = throwError $ InfiniteType a t
+//          | otherwise       = return $ Map.singleton a t
+
+fn unify<'a>(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> {
+    match (ty1, ty2) {
+        (Type::TyArr(l, r), Type::TyArr(l1, r1)) => {
+            let s1 = unify(*l, *l1)?;
+            let s2 = unify(apply_sub_type(&s1, &r), apply_sub_type(&s1, &r1))?;
+
+            Ok(compose(&s2, &s1))
+        }
+        (Type::TyVar(a), t) => bind(&a, &t),
+        (t, Type::TyVar(a)) => bind(&a, &t),
+
+        _ => unimplemented!("xxx"),
+    }
+}
+
+fn bind(var: &str, ty: &Type) -> Result<im::HashMap<String, Type>, String> {
+    if let Type::TyVar(x) = ty {
+        if var == x {
+            return Ok(im::HashMap::new());
+        }
+    }
+    if ftv_ty(ty).contains(var) {
+        return Err("Infinite Type".to_string());
+    }
+
+    return Ok(im::HashMap::new().update(var.to_string(), ty.clone()));
 }
 
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
@@ -153,7 +193,7 @@ impl<'a> Expr<'_> {
 
                 let (s1, t1) = expr1.get_type(env)?;
                 let (s2, t2) = expr2.get_type(&apply_sub_env(&s1, env))?;
-                let (s3, _) = unify(
+                let s3 = unify(
                     apply_sub_type(&s2, &t1),
                     Type::TyArr(Box::new(t2), Box::new(tv.clone())),
                 )?;
