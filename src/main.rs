@@ -4,9 +4,9 @@ mod eval;
 mod parser;
 mod types;
 use eval::Value;
-use parser::{Decl, Equation, Span};
+use parser::{Decl, Equation, Span, TypeDef};
 use std::io::stdin;
-use types::Scheme;
+use types::{Scheme, Type};
 
 pub fn exec(s: &str, type_env: &im::HashMap<String, Scheme>, env: &im::HashMap<String, Value>) {
     match parser::expression(parser::Span::new(&s)) {
@@ -35,10 +35,21 @@ fn load_module<B>(
     let mut env: im::HashMap<String, Value> = im::HashMap::new();
 
     if let Ok((_, b)) = module {
-        for Decl::Equation(Equation { expr, name, .. }) in b {
-            if let Ok(ty) = expr.expr.get_type(&type_env) {
-                type_env = type_env.update(name.to_string(), (vec![], ty.1));
-                env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
+        for decl in b {
+            match decl {
+                Decl::Equation(Equation { expr, name, .. }) => {
+                    if let Ok(ty) = expr.expr.get_type(&type_env) {
+                        type_env.insert(name.to_string(), (vec![], ty.1));
+                        env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
+                    }
+                }
+                Decl::TypeDef(TypeDef { name, alts, .. }) => {
+                    for x in alts {
+                        type_env
+                            .insert((*x).to_string(), (vec![], Type::TyCon((*name).to_string())));
+                        env = env.update((*x).to_string(), Value::Constant((*x).to_string()));
+                    }
+                }
             }
         }
     }

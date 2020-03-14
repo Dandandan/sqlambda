@@ -44,7 +44,7 @@ impl<'a> Expr<'a> {
 }
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
-    Unit,
+    Constant(String),
     Float(f64),
     Int64(i64),
     Int32(i32),

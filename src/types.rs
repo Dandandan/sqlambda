@@ -10,6 +10,8 @@ pub enum Type {
     TyArr(Box<Type>, Box<Type>),
     /// Type variable
     TyVar(String),
+    // Data type
+    TyCon(String),
 }
 
 fn get_item_types_inner(

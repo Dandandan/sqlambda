@@ -1,3 +1,4 @@
+type Bool=True|False
 empty = {}
 
 

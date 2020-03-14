@@ -28,6 +28,7 @@ impl fmt::Display for Type {
         match self {
             Type::TyVar(i) => write!(f, "{}", i),
             Type::TyArr(ty1, ty2) => write!(f, "{} -> {}", ty1, ty2),
+            Type::TyCon(name) => write!(f, "{}", name),
             t => write!(f, "{:?}", t),
         }
     }
@@ -39,8 +40,8 @@ impl fmt::Display for Value {
             Value::Int32(i) => write!(f, "{}", i),
             Value::Float(i) => write!(f, "{}", i),
             Value::DataSet(i, values) => write!(f, "{:?} {:?}", i, values),
-            Value::Unit => write!(f, "()"),
             Value::FnClosure(_, _, _) => write!(f, "fun"),
+            Value::Constant(s) => write!(f, "{}", s),
         }
     }
 }

@@ -105,7 +105,8 @@ fn comment(input: Span) -> IResult<Span, Expr> {
 fn identifier(i: Span) -> IResult<Span, Span> {
     let (i, id) = alpha1(i)?;
     // reserved key words
-    if id.fragment() == &"let" || id.fragment() == &"in" || id.fragment() == &"=" {
+    let f = id.fragment();
+    if f == &"let" || f == &"in" || f == &"=" || f == &"type" {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
@@ -197,7 +198,9 @@ pub fn expression(i: Span) -> IResult<Span, Expr> {
     }
 }
 
-pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
+pub fn parse_equation(i: Span) -> IResult<Span, Decl> {
+    let (i, _) = many0(char('\n'))(i)?;
+
     let (_, pos) = position(i)?;
 
     let (i, name) = identifier(i)?;
@@ -210,13 +213,34 @@ pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
 
     let (i, expr) = expression(i)?;
 
-    let (i, _) = many0(char('\n'))(i)?;
     Ok((
         i,
         Decl::Equation(Equation {
             name: &name.fragment(),
             span: pos,
             expr: Box::new(AnnotatedExpr { span: pos2, expr }),
+        }),
+    ))
+}
+
+pub fn parse_type_def(i: Span) -> IResult<Span, Decl> {
+    let (i, _) = tag("type")(i)?;
+    let (i, _) = space0(i)?;
+    let (_, pos) = position(i)?;
+
+    let (i, name) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('=')(i)?;
+
+    let (i, alts) = separated_list(char('|'), identifier)(i)?;
+    Ok((
+        i,
+        Decl::TypeDef(TypeDef {
+            name: &name.fragment(),
+            alts: alts.iter().map(|x| x.fragment()).cloned().collect(),
+            span: pos,
         }),
     ))
 }
@@ -229,13 +253,29 @@ pub struct AnnotatedExpr<'a> {
 }
 
 pub fn parse_module(i: Span) -> IResult<Span, Vec<Decl>> {
-    many0(parse_decl)(i)
+    many0(alt((parse_equation, parse_type_def)))(i)
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Decl<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
+
+    TypeDef(TypeDef<'a>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Equation<'a> {
+    pub name: &'a str,
+    pub expr: Box<AnnotatedExpr<'a>>,
+    span: Span<'a>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeDef<'a> {
+    pub name: &'a str,
+    pub alts: Vec<&'a str>,
+    span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -264,13 +304,6 @@ pub struct LetIn<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Equation<'a> {
-    pub name: &'a str,
-    pub expr: Box<AnnotatedExpr<'a>>,
-    span: Span<'a>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Int64(i64),
     Int32(i32),
@@ -278,16 +311,17 @@ pub enum Literal {
 }
 
 #[test]
-fn test_parse_decl() {
-    let res = parse_decl(Span::new("x=1"));
+fn test_parse_equation() {
+    let res = parse_equation(Span::new("x=1"));
     assert!(res.is_ok());
-    let (_, Decl::Equation(eq)) = res.unwrap();
-    assert_eq!(eq.span.location_offset(), 0);
-    assert_eq!(eq.span.get_utf8_column(), 1);
+    if let (_, Decl::Equation(eq)) = res.unwrap() {
+        assert_eq!(eq.span.location_offset(), 0);
+        assert_eq!(eq.span.get_utf8_column(), 1);
 
-    assert_eq!(eq.name, "x");
-    assert_eq!(eq.expr.span.location_offset(), 2);
-    assert_eq!(eq.expr.span.get_utf8_column(), 3);
+        assert_eq!(eq.name, "x");
+        assert_eq!(eq.expr.span.location_offset(), 2);
+        assert_eq!(eq.expr.span.get_utf8_column(), 3);
+    }
 }
 
 #[test]
@@ -371,15 +405,15 @@ fn test_multiple_decls() {
     assert!(res.is_ok());
 
     let (_, vs) = res.unwrap();
-    let Decl::Equation(eq) = vs.get(0).unwrap();
+    if let Decl::Equation(eq) = vs.get(0).unwrap() {
+        assert_eq!(eq.name, "x");
+        assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(1)));
+    }
 
-    assert_eq!(eq.name, "x");
-    assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(1)));
-
-    let Decl::Equation(eq) = vs.get(1).unwrap();
-
-    assert_eq!(eq.name, "y");
-    assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(2)));
+    if let Decl::Equation(eq) = vs.get(1).unwrap() {
+        assert_eq!(eq.name, "y");
+        assert_eq!(eq.expr.expr, Expr::Literal(Literal::Int64(2)));
+    }
 }
 
 #[test]
@@ -388,19 +422,19 @@ fn test_table_literal() {
 
     assert!(res.is_ok());
     let (_, vs) = res.unwrap();
-    let Decl::Equation(eq) = vs.get(0).unwrap();
-
-    assert_eq!(eq.name, "x");
-    assert_eq!(
-        eq.expr.expr,
-        Expr::DataSet(
-            vec!["a", "b"],
-            vec![vec![
-                Expr::Literal(Literal::Int64(1)),
-                Expr::Literal(Literal::Int64(2))
-            ]]
-        )
-    );
+    if let Decl::Equation(eq) = vs.get(0).unwrap() {
+        assert_eq!(eq.name, "x");
+        assert_eq!(
+            eq.expr.expr,
+            Expr::DataSet(
+                vec!["a", "b"],
+                vec![vec![
+                    Expr::Literal(Literal::Int64(1)),
+                    Expr::Literal(Literal::Int64(2))
+                ]]
+            )
+        );
+    }
 }
 
 #[test]
@@ -408,4 +442,15 @@ fn test_module() {
     let res = parse_module(Span::new(r"e={}\n\nid=\x -> x"));
 
     assert!(res.is_ok());
+}
+
+#[test]
+fn test_type_res() {
+    let res = parse_module(Span::new(r"type X=a|b"));
+
+    assert!(res.is_ok());
+    println!("{:?}", res);
+    assert!(
+        matches!(res.unwrap().1.as_slice(), [Decl::TypeDef(TypeDef{name: "X", alts, .. })] if *alts == ["a", "b"])
+    );
 }
