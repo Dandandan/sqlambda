@@ -4,11 +4,12 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-use nom::character::complete::{alpha1, char, digit0, digit1, multispace0, space0, space1};
+use nom::character::complete::{alpha1, char, digit0, digit1, space0, space1};
 
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
+    character::complete::line_ending,
     combinator::opt,
     multi::{many0, separated_list},
     sequence::pair,
@@ -32,17 +33,16 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
 
     let (i, _) = space0(i)?;
 
-    let (i, s) = opt(separated_list(pair(char('\n'), space0), table_row))(i)?;
+    let (i, _) = opt(line_ending)(i)?;
+    let (i, s) = opt(separated_list(pair(line_ending, space0), table_row))(i)?;
+
     let rows = s.unwrap_or_else(|| vec![]);
 
     let (i, _) = tag("}")(i)?;
 
     Ok((
         i,
-        Expr::DataSet(
-            header.iter().map(|x| (*x.fragment()).to_string()).collect(),
-            rows,
-        ),
+        Expr::DataSet(header.iter().map(|x| (*x.fragment())).collect(), rows),
     ))
 }
 
@@ -105,7 +105,7 @@ fn comment(input: Span) -> IResult<Span, Expr> {
 fn identifier(i: Span) -> IResult<Span, Span> {
     let (i, id) = alpha1(i)?;
     // reserved key words
-    if id.fragment() == &"let" {
+    if id.fragment() == &"let" || id.fragment() == &"in" || id.fragment() == &"=" {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
@@ -152,9 +152,49 @@ fn reference(i: Span) -> IResult<Span, Expr> {
     Ok((i, Expr::Ref(&name.fragment())))
 }
 
+fn lambda(i: Span) -> IResult<Span, Expr> {
+    let (_, pos) = position(i)?;
+
+    let (i, _) = char('\\')(i)?;
+
+    let (i, name) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = tag("->")(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, expr) = expression(i)?;
+    Ok((
+        i,
+        Expr::Lambda(name.fragment(), Box::new(AnnotatedExpr { span: pos, expr })),
+    ))
+}
+
+pub fn one_expression(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = space0(i)?;
+
+    alt((
+        let_in_expr,
+        table_literal,
+        lambda,
+        reference,
+        float,
+        int64,
+        comment,
+    ))(i)
+}
+
 pub fn expression(i: Span) -> IResult<Span, Expr> {
-    let (i, _) = multispace0(i)?;
-    alt((let_in_expr, table_literal, reference, float, int64, comment))(i)
+    let (i, expr) = one_expression(i)?;
+
+    let (i2, expr2) = opt(one_expression)(i)?;
+
+    match expr2 {
+        None => Ok((i, expr)),
+        Some(expr2) => Ok((i2, Expr::App(Box::new(expr), Box::new(expr2)))),
+    }
 }
 
 pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
@@ -165,11 +205,12 @@ pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
     let (i, _) = space0(i)?;
 
     let (i, _d) = char('=')(i)?;
+
     let (_, pos2) = position(i)?;
 
     let (i, expr) = expression(i)?;
-    let (i, _) = multispace0(i)?;
 
+    let (i, _) = many0(char('\n'))(i)?;
     Ok((
         i,
         Decl::Equation(Equation {
@@ -207,8 +248,12 @@ pub enum Expr<'a> {
     Ref(&'a str),
     // Let in expression
     LetIn(LetIn<'a>),
-    // Data set
-    DataSet(Vec<String>, Vec<Vec<Expr<'a>>>),
+    // DataSet expressions
+    DataSet(Vec<&'a str>, Vec<Vec<Expr<'a>>>),
+    // Lambda
+    Lambda(&'a str, Box<AnnotatedExpr<'a>>),
+    // Application
+    App(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -280,12 +325,43 @@ fn test_parse_float_whitespace() {
 }
 
 #[test]
+fn test_lambda() {
+    let res = expression(Span::new(r"\x -> y"));
+
+    if let Expr::Lambda(name, expr) = res.unwrap().1 {
+        assert_eq!(name, "x");
+        if let Expr::Ref(name) = expr.expr {
+            assert_eq!(name, "y");
+        } else {
+            panic!("Did not expect non-ref")
+        }
+    } else {
+        panic!("Did not expect non-lambda")
+    }
+}
+
+#[test]
 fn test_parse_comment() {
     let res = expression(Span::new("--comment\n"));
 
     assert!(res.is_ok());
 
     assert_eq!(res.unwrap().1, Expr::Comment("comment"))
+}
+
+#[test]
+fn test_app() {
+    let res = expression(Span::new("f 1"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(
+        res.unwrap().1,
+        Expr::App(
+            Box::new(Expr::Ref("f")),
+            Box::new(Expr::Literal(Literal::Int64(1)))
+        )
+    )
 }
 
 #[test]
@@ -311,7 +387,6 @@ fn test_table_literal() {
     let res = parse_module(Span::new("x={a, b\n1, 2}"));
 
     assert!(res.is_ok());
-
     let (_, vs) = res.unwrap();
     let Decl::Equation(eq) = vs.get(0).unwrap();
 
@@ -319,11 +394,18 @@ fn test_table_literal() {
     assert_eq!(
         eq.expr.expr,
         Expr::DataSet(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["a", "b"],
             vec![vec![
                 Expr::Literal(Literal::Int64(1)),
                 Expr::Literal(Literal::Int64(2))
             ]]
         )
     );
+}
+
+#[test]
+fn test_module() {
+    let res = parse_module(Span::new(r"e={}\n\nid=\x -> x"));
+
+    assert!(res.is_ok());
 }

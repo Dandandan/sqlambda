@@ -1,0 +1,4 @@
+empty = {}
+
+
+identity = \x -> x
