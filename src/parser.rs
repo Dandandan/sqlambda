@@ -4,7 +4,7 @@ extern crate nom_locate;
 use nom_locate::{position, LocatedSpan};
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-use nom::character::complete::{alpha1, char, digit0, digit1, multispace0, space0, space1};
+use nom::character::complete::{alpha1, char, digit0, digit1, space0, space1};
 
 use nom::{
     branch::alt,
@@ -32,8 +32,8 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
     let (i, header) = separated_list(pair(char(','), space0), identifier)(i)?;
 
     let (i, _) = space0(i)?;
-    let (i, _) = line_ending(i)?;
 
+    let (i, _) = opt(line_ending)(i)?;
     let (i, s) = opt(separated_list(pair(line_ending, space0), table_row))(i)?;
 
     let rows = s.unwrap_or_else(|| vec![]);
@@ -174,6 +174,7 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
 
 pub fn one_expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = space0(i)?;
+
     alt((
         let_in_expr,
         table_literal,
@@ -187,7 +188,9 @@ pub fn one_expression(i: Span) -> IResult<Span, Expr> {
 
 pub fn expression(i: Span) -> IResult<Span, Expr> {
     let (i, expr) = one_expression(i)?;
+
     let (i2, expr2) = opt(one_expression)(i)?;
+
     match expr2 {
         None => Ok((i, expr)),
         Some(expr2) => Ok((i2, Expr::App(Box::new(expr), Box::new(expr2)))),
@@ -202,11 +205,12 @@ pub fn parse_decl(i: Span) -> IResult<Span, Decl> {
     let (i, _) = space0(i)?;
 
     let (i, _d) = char('=')(i)?;
+
     let (_, pos2) = position(i)?;
 
     let (i, expr) = expression(i)?;
-    let (i, _) = multispace0(i)?;
 
+    let (i, _) = many0(char('\n'))(i)?;
     Ok((
         i,
         Decl::Equation(Equation {
@@ -322,7 +326,7 @@ fn test_parse_float_whitespace() {
 
 #[test]
 fn test_lambda() {
-    let res = expression(Span::new("\\x -> y"));
+    let res = expression(Span::new(r"\x -> y"));
 
     if let Expr::Lambda(name, expr) = res.unwrap().1 {
         assert_eq!(name, "x");
@@ -383,7 +387,6 @@ fn test_table_literal() {
     let res = parse_module(Span::new("x={a, b\n1, 2}"));
 
     assert!(res.is_ok());
-    println!("{:?}", res);
     let (_, vs) = res.unwrap();
     let Decl::Equation(eq) = vs.get(0).unwrap();
 
@@ -398,4 +401,11 @@ fn test_table_literal() {
             ]]
         )
     );
+}
+
+#[test]
+fn test_module() {
+    let res = parse_module(Span::new(r"e={}\n\nid=\x -> x"));
+
+    assert!(res.is_ok());
 }

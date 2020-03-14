@@ -234,10 +234,17 @@ fn test_type_let() {
 
 #[test]
 fn test_type_lam() {
-    let (_, expr) = expression(Span::new("\\x -> x")).unwrap();
+    let (_, expr) = expression(Span::new(r"\x -> x")).unwrap();
     let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
     match ty {
         Type::TyArr(x, y) => assert_eq!(x, y),
         _ => panic!("Did not expect non-tyarr result"),
     }
+}
+
+#[test]
+fn test_type_lam_app() {
+    let (_, expr) = expression(Span::new(r"let id = \x -> x in id 1")).unwrap();
+    let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
+    assert_eq!(ty, Type::Int64);
 }

@@ -89,7 +89,7 @@ impl RunExpr {
                         body.eval(&nenv)
                     }
                     _ => {
-                        unimplemented!("xx");
+                        panic!("Expected fn-clusure here");
                     }
                 }
             }
@@ -98,10 +98,32 @@ impl RunExpr {
 }
 
 #[cfg(test)]
+use super::parser::{expression, Span};
+
 #[test]
 fn test_eval() {
     assert_eq!(
         RunExpr::Value(Literal::Int64(1)).eval(&im::HashMap::new()),
         Value::Int64(1)
     );
+}
+#[test]
+fn test_eval_let_lam_app() {
+    let (_, expr) = expression(Span::new(r"let id = \x -> x in id 1")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(1));
+}
+
+#[test]
+fn test_eval_let_lam_app_fst() {
+    let (_, expr) = expression(Span::new(r"let fst = \x -> \y -> x in fst 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(1));
+}
+
+#[test]
+fn test_eval_let_lam_app_snd() {
+    let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(2));
 }
