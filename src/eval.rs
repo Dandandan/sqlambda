@@ -12,6 +12,7 @@ pub enum RunExpr {
     DataSet(Vec<String>, Vec<Vec<RunExpr>>),
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
+    Match(Box<RunExpr>, Vec<(RunExpr, RunExpr)>),
 }
 
 impl<'a> Expr<'a> {
@@ -38,6 +39,14 @@ impl<'a> Expr<'a> {
             Expr::App(e1, e2) => {
                 RunExpr::App(Box::new((*e1).to_run_expr()), Box::new((*e2).to_run_expr()))
             }
+            Expr::Match(e1, values) => RunExpr::Match(
+                Box::new((*e1).to_run_expr()),
+                values
+                    .iter()
+                    .map(|(x, y)| (x.to_run_expr(), y.to_run_expr()))
+                    .collect(),
+            ),
+
             _ => unimplemented!(),
         }
     }
@@ -79,6 +88,15 @@ impl RunExpr {
             ),
             RunExpr::Lambda(name, expr) => {
                 Value::FnClosure(name.to_string(), expr.clone(), e.clone())
+            }
+            RunExpr::Match(expr, exprs) => {
+                let v1 = expr.eval(e);
+                // TODO: multiple arms
+                let v2 = exprs.get(0).unwrap().0.eval(e);
+                if v1 == v2 {
+                    return exprs.get(0).unwrap().1.eval(e);
+                }
+                panic!("Non-exhaustive pattern match");
             }
             RunExpr::App(e1, arg) => {
                 let x = e1.eval(e);

@@ -105,11 +105,7 @@ fn match_with_expr(input: Span) -> IResult<Span, Expr> {
 
     let (i, _) = space1(i)?;
 
-    // TODO multiple arms
-    println!("f{}", i);
-
     let (i, expr3) = expression(i)?;
-    println!("h{}", i);
 
     Ok((i, Expr::Match(Box::new(expr1), vec![(expr2, expr3)])))
 }
@@ -490,6 +486,5 @@ fn test_match_with() {
     let res = expression(Span::new(r"match X with y -> z"));
 
     assert!(res.is_ok());
-    println!("{:?}", res);
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
 }
