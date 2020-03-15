@@ -33,6 +33,7 @@ impl fmt::Display for Type {
         }
     }
 }
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -45,10 +46,12 @@ impl fmt::Display for Value {
         }
     }
 }
+
 #[test]
 fn test_display_long() {
     assert_eq!(format!("{}", Expr::Literal(Literal::Int64(1))), "1")
 }
+
 #[test]
 fn test_display_float() {
     assert_eq!(format!("{}", Expr::Literal(Literal::Float(1.1))), "1.1")

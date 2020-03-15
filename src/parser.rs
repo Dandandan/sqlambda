@@ -86,6 +86,34 @@ fn let_in_expr(input: Span) -> IResult<Span, Expr> {
     ))
 }
 
+fn match_with_expr(input: Span) -> IResult<Span, Expr> {
+    // match <e1> with <p1> -> <e2>, [<p2> => e2..]
+
+    let (i, _) = tag("match")(input)?;
+    let (i, _) = space1(i)?;
+
+    let (i, expr1) = expression(i)?;
+    let (i, _) = space1(i)?;
+    let (i, _) = tag("with")(i)?;
+    let (i, _) = space1(i)?;
+
+    // TODO only patterns
+    let (i, expr2) = expression(i)?;
+    let (i, _) = space1(i)?;
+
+    let (i, _) = tag("->")(i)?;
+
+    let (i, _) = space1(i)?;
+
+    // TODO multiple arms
+    println!("f{}", i);
+
+    let (i, expr3) = expression(i)?;
+    println!("h{}", i);
+
+    Ok((i, Expr::Match(Box::new(expr1), vec![(expr2, expr3)])))
+}
+
 fn comment(input: Span) -> IResult<Span, Expr> {
     let (i, _) = tag("--")(input)?;
 
@@ -106,7 +134,7 @@ fn identifier(i: Span) -> IResult<Span, Span> {
     let (i, id) = alpha1(i)?;
     // reserved key words
     let f = id.fragment();
-    if f == &"let" || f == &"in" || f == &"=" || f == &"type" {
+    if f == &"let" || f == &"in" || f == &"=" || f == &"type" || f == &"match" || f == &"with" {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
@@ -178,6 +206,7 @@ pub fn one_expression(i: Span) -> IResult<Span, Expr> {
 
     alt((
         let_in_expr,
+        match_with_expr,
         table_literal,
         lambda,
         reference,
@@ -294,6 +323,8 @@ pub enum Expr<'a> {
     Lambda(&'a str, Box<AnnotatedExpr<'a>>),
     // Application
     App(Box<Expr<'a>>, Box<Expr<'a>>),
+    // Pattern matching (TODO only patterns)
+    Match(Box<Expr<'a>>, Vec<(Expr<'a>, Expr<'a>)>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -449,8 +480,16 @@ fn test_type_res() {
     let res = parse_module(Span::new(r"type X=a|b"));
 
     assert!(res.is_ok());
-    println!("{:?}", res);
     assert!(
         matches!(res.unwrap().1.as_slice(), [Decl::TypeDef(TypeDef{name: "X", alts, .. })] if *alts == ["a", "b"])
     );
+}
+
+#[test]
+fn test_match_with() {
+    let res = expression(Span::new(r"match X with y -> z"));
+
+    assert!(res.is_ok());
+    println!("{:?}", res);
+    assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
 }
