@@ -12,6 +12,7 @@ pub enum RunExpr {
     DataSet(Vec<String>, Vec<Vec<RunExpr>>),
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
+    Match(Box<RunExpr>, Vec<(String, RunExpr)>),
 }
 
 impl<'a> Expr<'a> {
@@ -38,13 +39,21 @@ impl<'a> Expr<'a> {
             Expr::App(e1, e2) => {
                 RunExpr::App(Box::new((*e1).to_run_expr()), Box::new((*e2).to_run_expr()))
             }
+            Expr::Match(e1, values) => RunExpr::Match(
+                Box::new((*e1).to_run_expr()),
+                values
+                    .iter()
+                    .map(|(x, y)| (x.name.to_string(), y.to_run_expr()))
+                    .collect(),
+            ),
+
             _ => unimplemented!(),
         }
     }
 }
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
-    Unit,
+    Constant(String),
     Float(f64),
     Int64(i64),
     Int32(i32),
@@ -79,6 +88,16 @@ impl RunExpr {
             ),
             RunExpr::Lambda(name, expr) => {
                 Value::FnClosure(name.to_string(), expr.clone(), e.clone())
+            }
+            RunExpr::Match(expr, exprs) => {
+                let v1 = expr.eval(e);
+                // TODO: optimize
+                for arm in exprs {
+                    if Value::Constant(arm.0.to_string()) == v1 {
+                        return arm.1.eval(e);
+                    }
+                }
+                panic!("Non-exhaustive pattern match");
             }
             RunExpr::App(e1, arg) => {
                 let x = e1.eval(e);
@@ -123,6 +142,13 @@ fn test_eval_let_lam_app_fst() {
 
 #[test]
 fn test_eval_let_lam_app_snd() {
+    let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(2));
+}
+
+#[test]
+fn test_eval_match() {
     let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
     let res = expr.to_run_expr().eval(&im::HashMap::new());
     assert_eq!(res, Value::Int64(2));

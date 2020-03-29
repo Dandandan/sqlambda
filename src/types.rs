@@ -1,4 +1,4 @@
-use super::parser::{Expr, Literal};
+use super::parser::{Expr, Literal, Pattern};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Type {
@@ -10,6 +10,8 @@ pub enum Type {
     TyArr(Box<Type>, Box<Type>),
     /// Type variable
     TyVar(String),
+    // Data type
+    TyCon(String),
 }
 
 fn get_item_types_inner(
@@ -49,7 +51,11 @@ type Subs<'a> = &'a im::HashMap<String, Type>;
 
 fn apply_sub_type(subs: Subs, ty: &Type) -> Type {
     match ty {
-        Type::TyVar(name) => subs.get(name).unwrap_or(&ty.clone()).clone(),
+        Type::TyVar(name) => subs.get(name).unwrap_or_else(|| &ty).clone(),
+        Type::TyArr(t1, t2) => Type::TyArr(
+            Box::new(apply_sub_type(subs, t1)),
+            Box::new(apply_sub_type(subs, t2)),
+        ),
         _ => ty.clone(),
     }
 }
@@ -112,27 +118,11 @@ fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
     (a, ty.clone())
 }
 
-// unify ::  Type -> Type -> Infer Subst
-// unify (l `TArr` r) (l' `TArr` r')  = do
-//     s1 <- unify l l'
-//     s2 <- unify (apply s1 r) (apply s1 r')
-//     return (s2 `compose` s1)
-
-// unify (TVar a) t = bind a t
-// unify t (TVar a) = bind a t
-// unify (TCon a) (TCon b) | a == b = return nullSubst
-// unify t1 t2 = throwError $ UnificationFail t1 t2
-
-// bind ::  TVar -> Type -> Infer Subst
-// bind a t | t == TVar a     = return nullSubst
-//          | occursCheck a t = throwError $ InfiniteType a t
-//          | otherwise       = return $ Map.singleton a t
-
-fn unify(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> {
+fn unify(ty1: &Type, ty2: &Type) -> Result<im::HashMap<String, Type>, String> {
     match (ty1, ty2) {
         (Type::TyArr(l, r), Type::TyArr(l1, r1)) => {
-            let s1 = unify(*l, *l1)?;
-            let s2 = unify(apply_sub_type(&s1, &r), apply_sub_type(&s1, &r1))?;
+            let s1 = unify(l, l1)?;
+            let s2 = unify(&apply_sub_type(&s1, &r), &apply_sub_type(&s1, &r1))?;
 
             Ok(compose(&s2, &s1))
         }
@@ -142,7 +132,7 @@ fn unify(ty1: Type, ty2: Type) -> Result<im::HashMap<String, Type>, String> {
             if t1 == t2 {
                 Ok(im::HashMap::new())
             } else {
-                Err("".to_string())
+                Err("UnificationFail".to_string())
             }
         }
     }
@@ -159,6 +149,17 @@ fn bind(var: &str, ty: &Type) -> Result<im::HashMap<String, Type>, String> {
     }
 
     Ok(im::HashMap::new().update(var.to_string(), ty.clone()))
+}
+
+fn type_pat<'a>(
+    env: &im::HashMap<String, Scheme>,
+    case_type: &Type,
+    pattern: &Pattern,
+) -> Result<im::HashMap<String, Type>, String> {
+    // todo vars / wildcards, etc
+    let (_s, ty) = env.get(pattern.name).unwrap();
+
+    unify(case_type, ty)
 }
 
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
@@ -199,10 +200,30 @@ impl<'a> Expr<'_> {
                 let (s1, t1) = expr1.get_type(env)?;
                 let (s2, t2) = expr2.get_type(&apply_sub_env(&s1, env))?;
                 let s3 = unify(
-                    apply_sub_type(&s2, &t1),
-                    Type::TyArr(Box::new(t2), Box::new(tv.clone())),
+                    &apply_sub_type(&s2, &t1),
+                    &Type::TyArr(Box::new(t2), Box::new(tv.clone())),
                 )?;
-                Ok((compose(&compose(&s3, &s2), &s2), apply_sub_type(&s3, &tv)))
+                Ok((compose(&compose(&s3, &s2), &s1), apply_sub_type(&s3, &tv)))
+            }
+            Expr::Match(expr, exprs) => {
+                let (mut subs, case_type) = expr.get_type(env)?;
+                let mut branch_type = Type::TyVar(get_id().to_string());
+
+                for (p, branch) in exprs {
+                    // TODO check, test
+                    let pat_sub = type_pat(env, &case_type, p)?;
+                    subs = compose(&subs, &pat_sub);
+
+                    let (s, n_branch_type) = branch.get_type(env)?;
+                    subs = compose(&subs, &s);
+                    let cur_branch_type = apply_sub_type(&subs, &n_branch_type);
+
+                    let s2 = unify(&branch_type, &cur_branch_type)?;
+                    subs = compose(&subs, &s2);
+                    branch_type = apply_sub_type(&subs, &branch_type);
+                }
+
+                Ok((subs, branch_type))
             }
             x => Err(format!("not implemented {:?}", x)),
         }

@@ -1,4 +1,15 @@
+type Bool=True|False
+
+not = \x -> match x with True -> False;False -> True
+
+or = \x -> \y -> match x with True -> True;False -> match y with True -> True;False -> False
+
+and = \x -> \y -> match x with False -> False;True -> match y with True -> True;False -> False
+
 empty = {}
 
 
 identity = \x -> x
+
+fst = \x -> \y -> x
+snd = \x -> \y -> y
