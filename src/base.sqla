@@ -1,5 +1,11 @@
 type Bool=True|False
+
+not = \x -> match x with True -> False;False -> True
+
 empty = {}
 
 
 identity = \x -> x
+
+fst = \x -> \y -> x
+snd = \x -> \y -> y

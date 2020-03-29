@@ -86,6 +86,20 @@ fn let_in_expr(input: Span) -> IResult<Span, Expr> {
     ))
 }
 
+fn pattern_expr(i: Span) -> IResult<Span, (Pattern, Expr)> {
+    let (i, expr2) = pattern(i)?;
+
+    let (i, _) = space1(i)?;
+
+    let (i, _) = tag("->")(i)?;
+
+    let (i, _) = space1(i)?;
+
+    let (i, expr3) = expression(i)?;
+
+    Ok((i, (expr2, expr3)))
+}
+
 fn match_with_expr(input: Span) -> IResult<Span, Expr> {
     // match <e1> with <p1> -> <e2>, [<p2> => e2..]
 
@@ -97,17 +111,9 @@ fn match_with_expr(input: Span) -> IResult<Span, Expr> {
     let (i, _) = tag("with")(i)?;
     let (i, _) = space1(i)?;
 
-    // TODO only patterns
-    let (i, expr2) = expression(i)?;
-    let (i, _) = space1(i)?;
+    let (i, patterns) = separated_list(char(';'), pattern_expr)(i)?;
 
-    let (i, _) = tag("->")(i)?;
-
-    let (i, _) = space1(i)?;
-
-    let (i, expr3) = expression(i)?;
-
-    Ok((i, Expr::Match(Box::new(expr1), vec![(expr2, expr3)])))
+    Ok((i, Expr::Match(Box::new(expr1), patterns)))
 }
 
 fn comment(input: Span) -> IResult<Span, Expr> {
@@ -134,6 +140,17 @@ fn identifier(i: Span) -> IResult<Span, Span> {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
+}
+
+fn pattern(i: Span) -> IResult<Span, Pattern> {
+    let (i, name) = identifier(i)?;
+    Ok((
+        i,
+        Pattern {
+            name: &name.fragment(),
+            bindings: vec![],
+        },
+    ))
 }
 
 fn digit<T: std::str::FromStr>(i: Span, f: fn(T) -> Literal) -> IResult<Span, Expr> {
@@ -213,14 +230,15 @@ pub fn one_expression(i: Span) -> IResult<Span, Expr> {
 }
 
 pub fn expression(i: Span) -> IResult<Span, Expr> {
-    let (i, expr) = one_expression(i)?;
+    let (i, mut expr) = one_expression(i)?;
 
-    let (i2, expr2) = opt(one_expression)(i)?;
+    let (i2, tree) = many0(one_expression)(i)?;
 
-    match expr2 {
-        None => Ok((i, expr)),
-        Some(expr2) => Ok((i2, Expr::App(Box::new(expr), Box::new(expr2)))),
+    for expr2 in tree {
+        expr = Expr::App(Box::new(expr), Box::new(expr2));
     }
+
+    Ok((i2, expr))
 }
 
 pub fn parse_equation(i: Span) -> IResult<Span, Decl> {
@@ -320,7 +338,13 @@ pub enum Expr<'a> {
     // Application
     App(Box<Expr<'a>>, Box<Expr<'a>>),
     // Pattern matching (TODO only patterns)
-    Match(Box<Expr<'a>>, Vec<(Expr<'a>, Expr<'a>)>),
+    Match(Box<Expr<'a>>, Vec<(Pattern<'a>, Expr<'a>)>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Pattern<'a> {
+    pub name: &'a str,
+    pub bindings: Vec<&'a str>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -484,6 +508,14 @@ fn test_type_res() {
 #[test]
 fn test_match_with() {
     let res = expression(Span::new(r"match X with y -> z"));
+
+    assert!(res.is_ok());
+    assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
+}
+
+#[test]
+fn test_match_with_multi() {
+    let res = expression(Span::new(r"match X with y -> z;a -> n"));
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));

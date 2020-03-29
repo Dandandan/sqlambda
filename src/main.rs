@@ -38,9 +38,12 @@ fn load_module<B>(
         for decl in b {
             match decl {
                 Decl::Equation(Equation { expr, name, .. }) => {
-                    if let Ok(ty) = expr.expr.get_type(&type_env) {
+                    let type_res = expr.expr.get_type(&type_env);
+                    if let Ok(ty) = type_res {
                         type_env.insert(name.to_string(), (vec![], ty.1));
                         env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
+                    } else {
+                        println!("Err {:?}", type_res);
                     }
                 }
                 Decl::TypeDef(TypeDef { name, alts, .. }) => {
@@ -62,8 +65,9 @@ fn main() -> io::Result<()> {
 
     let module = parser::parse_module(parser::Span::new(&file));
 
-    println!("Ok, modules loaded");
     let (type_env, env) = load_module(module);
+    println!("Ok, modules loaded");
+
     loop {
         let mut s = String::new();
 

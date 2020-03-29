@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use sqlambda::lib;
 
 fn fibonacci(n: u64) -> u64 {
     match n {

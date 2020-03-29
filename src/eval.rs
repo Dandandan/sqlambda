@@ -12,7 +12,7 @@ pub enum RunExpr {
     DataSet(Vec<String>, Vec<Vec<RunExpr>>),
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
-    Match(Box<RunExpr>, Vec<(RunExpr, RunExpr)>),
+    Match(Box<RunExpr>, Vec<(String, RunExpr)>),
 }
 
 impl<'a> Expr<'a> {
@@ -43,7 +43,7 @@ impl<'a> Expr<'a> {
                 Box::new((*e1).to_run_expr()),
                 values
                     .iter()
-                    .map(|(x, y)| (x.to_run_expr(), y.to_run_expr()))
+                    .map(|(x, y)| (x.name.to_string(), y.to_run_expr()))
                     .collect(),
             ),
 
@@ -91,10 +91,11 @@ impl RunExpr {
             }
             RunExpr::Match(expr, exprs) => {
                 let v1 = expr.eval(e);
-                // TODO: multiple arms
-                let v2 = exprs.get(0).unwrap().0.eval(e);
-                if v1 == v2 {
-                    return exprs.get(0).unwrap().1.eval(e);
+                // TODO: optimize
+                for arm in exprs {
+                    if Value::Constant(arm.0.to_string()) == v1 {
+                        return arm.1.eval(e);
+                    }
                 }
                 panic!("Non-exhaustive pattern match");
             }
@@ -141,6 +142,13 @@ fn test_eval_let_lam_app_fst() {
 
 #[test]
 fn test_eval_let_lam_app_snd() {
+    let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(2));
+}
+
+#[test]
+fn test_eval_match() {
     let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
     let res = expr.to_run_expr().eval(&im::HashMap::new());
     assert_eq!(res, Value::Int64(2));
