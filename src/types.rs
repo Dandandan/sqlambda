@@ -151,7 +151,7 @@ fn bind(var: &str, ty: &Type) -> Result<im::HashMap<String, Type>, String> {
     Ok(im::HashMap::new().update(var.to_string(), ty.clone()))
 }
 
-fn type_pat<'a>(
+fn type_pat(
     env: &im::HashMap<String, Scheme>,
     case_type: &Type,
     pattern: &Pattern,

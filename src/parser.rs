@@ -214,10 +214,24 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
     ))
 }
 
+fn grouped_expr(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = char('(')(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, expr) = expression(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char(')')(i)?;
+
+    Ok((i, expr))
+}
+
 pub fn one_expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = space0(i)?;
 
     alt((
+        grouped_expr,
         let_in_expr,
         match_with_expr,
         table_literal,
@@ -447,6 +461,24 @@ fn test_app() {
             Box::new(Expr::Literal(Literal::Int64(1)))
         )
     )
+}
+
+#[test]
+fn test_app_2() {
+    let res = expression(Span::new("f 1 2"));
+
+    assert!(res.is_ok());
+
+    assert_eq!(
+        res.unwrap().1,
+        Expr::App(
+            Box::new(Expr::App(
+                Box::new(Expr::Ref("f")),
+                Box::new(Expr::Literal(Literal::Int64(1)))
+            )),
+            Box::new(Expr::Literal(Literal::Int64(2)))
+        )
+    );
 }
 
 #[test]
