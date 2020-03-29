@@ -12,4 +12,5 @@ empty = {}
 identity = \x -> x
 
 fst = \x -> \y -> x
+
 snd = \x -> \y -> y
