@@ -1,10 +1,10 @@
 type Bool=True|False
 
-not = \x -> match x with True -> False;False -> True
+not = \x -> match (x) {True -> False;False -> True}
 
-or = \x -> \y -> match x with True -> True;False -> match y with True -> True;False -> False
+or = \x -> \y -> match (x) {True -> True;False -> match (y) {True -> True;False -> False}}
 
-and = \x -> \y -> match x with False -> False;True -> match y with True -> True;False -> False
+and = \x -> \y -> match (x) {False -> False;True -> match (y) {True -> True;False -> False}}
 
 empty = {}
 

@@ -104,14 +104,25 @@ fn match_with_expr(input: Span) -> IResult<Span, Expr> {
     // match <e1> with <p1> -> <e2>, [<p2> => e2..]
 
     let (i, _) = tag("match")(input)?;
-    let (i, _) = space1(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('(')(i)?;
+    let (i, _) = space0(i)?;
 
     let (i, expr1) = expression(i)?;
-    let (i, _) = space1(i)?;
-    let (i, _) = tag("with")(i)?;
-    let (i, _) = space1(i)?;
+    let (i, _) = space0(i)?;
 
-    let (i, patterns) = separated_list(char(';'), pattern_expr)(i)?;
+    let (i, _) = char(')')(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('{')(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, patterns) = separated_list(pair(char(';'), space0), pattern_expr)(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('}')(i)?;
 
     Ok((i, Expr::Match(Box::new(expr1), patterns)))
 }
@@ -539,7 +550,7 @@ fn test_type_res() {
 
 #[test]
 fn test_match_with() {
-    let res = expression(Span::new(r"match X with y -> z"));
+    let res = expression(Span::new(r"match (X) {y -> z}"));
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
@@ -547,7 +558,7 @@ fn test_match_with() {
 
 #[test]
 fn test_match_with_multi() {
-    let res = expression(Span::new(r"match X with y -> z;a -> n"));
+    let res = expression(Span::new(r"match (X) {y -> z;a -> n}"));
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
