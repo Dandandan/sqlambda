@@ -178,13 +178,19 @@ impl<'a> Expr<'_> {
                 let (s2, t2) = x.expr2.expr.get_type(&extended_ty)?;
                 Ok((compose(&s1, &s2), t2))
             }
-            Expr::DataSet(names, items) => Ok((
-                im::HashMap::new(),
-                Type::Dataset(
-                    names.iter().map(|x| (*x).to_string()).collect(),
-                    get_item_types(items, env),
-                ),
-            )),
+            Expr::DataSet(names, items) => {
+                let mut items = get_item_types(items, env);
+                if items.is_empty() {
+                    items = names
+                        .iter()
+                        .map(|_| Type::TyVar(get_id().to_string()))
+                        .collect()
+                }
+                Ok((
+                    im::HashMap::new(),
+                    Type::Dataset(names.iter().map(|x| (*x).to_string()).collect(), items),
+                ))
+            }
             Expr::Lambda(name, expr) => {
                 let type_var = Type::TyVar(get_id().to_string()); //fresh();
                 let env1 = env.update((*name).to_string(), (im::HashSet::new(), type_var.clone()));
