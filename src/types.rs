@@ -225,6 +225,22 @@ impl<'a> Expr<'_> {
 
                 Ok((subs, branch_type))
             }
+            Expr::Projection(names, expr) => {
+                let x = expr.get_type(env)?;
+                match x {
+                    (_s, Type::Dataset(ids, ty)) => Ok((
+                        im::HashMap::new(),
+                        Type::Dataset(
+                            ids.iter()
+                                .filter(|&x| names.contains(&&*x.to_string()))
+                                .cloned()
+                                .collect(),
+                            vec![],
+                        ),
+                    )),
+                    _ => Err("Not compatible".to_string()),
+                }
+            }
             x => Err(format!("not implemented {:?}", x)),
         }
     }
@@ -268,4 +284,11 @@ fn test_type_lam_app() {
     let (_, expr) = expression(Span::new(r"let id = \x -> x in id 1")).unwrap();
     let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
     assert_eq!(ty, Type::Int64);
+}
+
+#[test]
+fn test_type_sql() {
+    let (_, expr) = expression(Span::new("let t = {a\n1} in select a from t")).unwrap();
+    let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
+    assert_eq!(ty, Type::Dataset(vec!["a".to_string()], vec![Type::Int64]));
 }

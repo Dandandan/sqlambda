@@ -227,10 +227,33 @@ fn grouped_expr(i: Span) -> IResult<Span, Expr> {
     Ok((i, expr))
 }
 
+fn select(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = tag("select")(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, pr) = separated_list(char(','), identifier)(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = tag("from")(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, expr) = expression(i)?;
+    Ok((
+        i,
+        Expr::Projection(
+            pr.iter().map(|x| x.fragment()).cloned().collect(),
+            Box::new(expr),
+        ),
+    ))
+}
+
 pub fn one_expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = space0(i)?;
 
     alt((
+        select,
         grouped_expr,
         let_in_expr,
         match_with_expr,
@@ -353,6 +376,10 @@ pub enum Expr<'a> {
     App(Box<Expr<'a>>, Box<Expr<'a>>),
     // Pattern matching (TODO only patterns)
     Match(Box<Expr<'a>>, Vec<(Pattern<'a>, Expr<'a>)>),
+
+    // Projection (map); currently without applying functions
+    // select a, b from t
+    Projection(Vec<&'a str>, Box<Expr<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -551,4 +578,12 @@ fn test_match_with_multi() {
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
+}
+
+#[test]
+fn test_sql_projection() {
+    let res = expression(Span::new(r"select a from t"));
+
+    assert!(res.is_ok());
+    assert!(matches!(res.clone().unwrap().1, Expr::Projection(e, _v) if e[0] == "a"));
 }
