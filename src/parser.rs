@@ -104,27 +104,32 @@ fn match_with_expr(input: Span) -> IResult<Span, Expr> {
     // match <e1> with <p1> -> <e2>, [<p2> => e2..]
 
     let (i, _) = tag("match")(input)?;
-    let (i, _) = space0(i)?;
 
-    let (i, _) = char('(')(i)?;
-    let (i, _) = space0(i)?;
-
-    let (i, expr1) = expression(i)?;
-    let (i, _) = space0(i)?;
-
-    let (i, _) = char(')')(i)?;
+    let (i, expr1) = opt(expression)(i)?;
 
     let (i, _) = space0(i)?;
 
     let (i, _) = char('{')(i)?;
     let (i, _) = space0(i)?;
 
-    let (i, patterns) = separated_list(pair(char(';'), space0), pattern_expr)(i)?;
-    let (i, _) = space0(i)?;
+    let (pat_spn, patterns) = separated_list(pair(char(';'), space0), pattern_expr)(i)?;
+    let (i, _) = space0(pat_spn)?;
 
     let (i, _) = char('}')(i)?;
 
-    Ok((i, Expr::Match(Box::new(expr1), patterns)))
+    match expr1 {
+        None => Ok((
+            i,
+            Expr::Lambda(
+                "$x",
+                Box::new(AnnotatedExpr {
+                    expr: Expr::Match(Box::new(Expr::Ref("$x")), patterns),
+                    span: pat_spn,
+                }),
+            ),
+        )),
+        Some(x) => Ok((i, Expr::Match(Box::new(x), patterns))),
+    }
 }
 
 fn comment(input: Span) -> IResult<Span, Expr> {
@@ -589,6 +594,18 @@ fn test_match_with_multi() {
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
+}
+
+#[test]
+fn test_match_shorthand() {
+    let res = expression(Span::new(r"match {y -> z;a -> n}"));
+
+    assert!(res.is_ok());
+    assert!(matches!(
+        res.unwrap().1,
+        Expr::Lambda(_x, x)
+        if matches!(x.clone().expr, Expr::Match(_x, _v))
+    ));
 }
 
 #[test]
