@@ -40,7 +40,7 @@ fn load_module<B>(
                 Decl::Equation(Equation { expr, name, .. }) => {
                     let type_res = expr.expr.get_type(&type_env);
                     if let Ok(ty) = type_res {
-                        type_env.insert(name.to_string(), (vec![], ty.1));
+                        type_env.insert(name.to_string(), (im::HashSet::new(), ty.1));
                         env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
                     } else {
                         println!("Err {:?}", type_res);
@@ -48,8 +48,10 @@ fn load_module<B>(
                 }
                 Decl::TypeDef(TypeDef { name, alts, .. }) => {
                     for x in alts {
-                        type_env
-                            .insert((*x).to_string(), (vec![], Type::TyCon((*name).to_string())));
+                        type_env.insert(
+                            (*x).to_string(),
+                            (im::HashSet::new(), Type::TyCon((*name).to_string())),
+                        );
                         env = env.update((*x).to_string(), Value::Constant((*x).to_string()));
                     }
                 }
