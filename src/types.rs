@@ -45,7 +45,7 @@ fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Scheme>) -> Vec
 
 type TypeRes<'a> = (im::HashMap<String, Type>, Type);
 
-pub type Scheme = (Vec<String>, Type);
+pub type Scheme = (im::HashSet<String>, Type);
 
 type Subs<'a> = &'a im::HashMap<String, Type>;
 
@@ -87,22 +87,22 @@ fn compose(subs: Subs, subs2: Subs) -> im::HashMap<String, Type> {
     h.union(subs2.clone())
 }
 
-fn ftv_ty(ty: &Type) -> std::collections::HashSet<String> {
+fn ftv_ty(ty: &Type) -> im::HashSet<String> {
     match ty {
         Type::TyVar(a) => [a].iter().cloned().cloned().collect(),
         Type::TyArr(ty1, ty2) => {
             let x = ftv_ty(ty1);
             let y = ftv_ty(ty2);
-            x.union(&y).cloned().collect()
+            x.union(y)
         }
 
-        _ => std::collections::HashSet::new(),
+        _ => im::HashSet::new(),
     }
 }
 
-fn ftv_env(env: &im::HashMap<String, Scheme>) -> std::collections::HashSet<String> {
+fn ftv_env(env: &im::HashMap<String, Scheme>) -> im::HashSet<String> {
     let ftvs = env.values().map(|x| ftv_ty(&x.1));
-    let mut j = std::collections::HashSet::new();
+    let mut j = im::HashSet::new();
     for y in ftvs {
         for z in y {
             j.insert(z);
@@ -114,7 +114,7 @@ fn ftv_env(env: &im::HashMap<String, Scheme>) -> std::collections::HashSet<Strin
 fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
     let xs = ftv_ty(ty);
     let ys = ftv_env(env);
-    let a = xs.difference(&ys).cloned().collect::<Vec<String>>();
+    let a = xs.difference(ys);
     (a, ty.clone())
 }
 
@@ -189,7 +189,7 @@ impl<'a> Expr<'_> {
             )),
             Expr::Lambda(name, expr) => {
                 let type_var = Type::TyVar(get_id().to_string()); //fresh();
-                let env1 = env.update((*name).to_string(), (vec![], type_var.clone()));
+                let env1 = env.update((*name).to_string(), (im::HashSet::new(), type_var.clone()));
                 let (sub, t1) = expr.expr.get_type(&env1)?;
                 let substituted = apply_sub_type(&sub, &type_var);
                 Ok((sub, Type::TyArr(Box::new(substituted), Box::new(t1))))
