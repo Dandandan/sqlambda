@@ -215,7 +215,10 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
 
     let (i, _) = char('\\')(i)?;
 
-    let (i, name) = identifier(i)?;
+    let (i, binding) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+    let (i, bindings) = separated_list(space1, identifier)(i)?;
 
     let (i, _) = space0(i)?;
 
@@ -223,10 +226,16 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
 
     let (i, _) = space0(i)?;
 
-    let (i, expr) = expression(i)?;
+    let (i, mut expr) = expression(i)?;
+    for x in bindings.iter().rev() {
+        expr = Expr::Lambda(x.fragment(), Box::new(AnnotatedExpr { span: *x, expr }));
+    }
     Ok((
         i,
-        Expr::Lambda(name.fragment(), Box::new(AnnotatedExpr { span: pos, expr })),
+        Expr::Lambda(
+            binding.fragment(),
+            Box::new(AnnotatedExpr { span: pos, expr }),
+        ),
     ))
 }
 
