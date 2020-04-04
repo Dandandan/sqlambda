@@ -104,9 +104,7 @@ fn ftv_env(env: &im::HashMap<String, Scheme>) -> im::HashSet<String> {
     let ftvs = env.values().map(|x| ftv_ty(&x.1));
     let mut j = im::HashSet::new();
     for y in ftvs {
-        for z in y {
-            j.insert(z);
-        }
+        j = j.union(y);
     }
     j
 }
@@ -226,8 +224,8 @@ impl<'a> Expr<'_> {
                 Ok((subs, branch_type))
             }
             Expr::Projection(names, expr) => {
-                let x = expr.get_type(env)?;
-                match x {
+                let from_ty = expr.get_type(env)?;
+                match from_ty {
                     (_s, Type::Dataset(ids, ty)) => Ok((
                         im::HashMap::new(),
                         Type::Dataset(
@@ -235,10 +233,14 @@ impl<'a> Expr<'_> {
                                 .filter(|&x| names.contains(&&*x.to_string()))
                                 .cloned()
                                 .collect(),
-                            vec![],
+                            ids.iter()
+                                .enumerate()
+                                .filter(|(_i, x)| names.contains(&&*x.to_string()))
+                                .map(|(i, _)| ty[i].clone())
+                                .collect(),
                         ),
                     )),
-                    _ => Err("Not compatible".to_string()),
+                    _ => Err("Expected dataset".to_string()),
                 }
             }
             x => Err(format!("not implemented {:?}", x)),
