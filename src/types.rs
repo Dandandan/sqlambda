@@ -232,20 +232,31 @@ impl<'a> Expr<'_> {
             Expr::Projection(names, expr) => {
                 let from_ty = expr.get_type(env)?;
                 match from_ty {
-                    (_s, Type::Dataset(ids, ty)) => Ok((
-                        im::HashMap::new(),
-                        Type::Dataset(
-                            ids.iter()
-                                .filter(|&x| names.contains(&&*x.to_string()))
-                                .cloned()
-                                .collect(),
-                            ids.iter()
-                                .enumerate()
-                                .filter(|(_i, x)| names.contains(&&*x.to_string()))
-                                .map(|(i, _)| ty[i].clone())
-                                .collect(),
-                        ),
-                    )),
+                    (_s, Type::Dataset(ids, ty)) => {
+                        if names
+                            .iter()
+                            .filter(|x| !ids.contains(&x.to_string()))
+                            .count()
+                            > 0
+                        {
+                            // TODO; improve error
+                            return Err("Not all fields in dataset".to_string());
+                        }
+                        Ok((
+                            im::HashMap::new(),
+                            Type::Dataset(
+                                ids.iter()
+                                    .filter(|&x| names.contains(&&*x.to_string()))
+                                    .cloned()
+                                    .collect(),
+                                ids.iter()
+                                    .enumerate()
+                                    .filter(|(_i, x)| names.contains(&&*x.to_string()))
+                                    .map(|(i, _)| ty[i].clone())
+                                    .collect(),
+                            ),
+                        ))
+                    }
                     _ => Err("Expected dataset".to_string()),
                 }
             }

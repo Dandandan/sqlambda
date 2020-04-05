@@ -13,6 +13,7 @@ pub enum RunExpr {
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
     Match(Box<RunExpr>, Vec<(String, RunExpr)>),
+    Projection(Vec<String>, Box<RunExpr>),
 }
 
 impl<'a> Expr<'a> {
@@ -46,7 +47,12 @@ impl<'a> Expr<'a> {
                     .map(|(x, y)| (x.name.to_string(), y.to_run_expr()))
                     .collect(),
             ),
-
+            Expr::Projection(p, v) => {
+                return RunExpr::Projection(
+                    p.iter().map(|x| (*x).to_string()).collect(),
+                    Box::new((*v).to_run_expr()),
+                );
+            }
             _ => unimplemented!(),
         }
     }
@@ -110,6 +116,22 @@ impl RunExpr {
                     _ => {
                         panic!("Expected fn-clusure here");
                     }
+                }
+            }
+            RunExpr::Projection(names, expr) => {
+                // TODO don't evaluate whole dataset
+                let d = expr.eval(e);
+                if let Value::DataSet(d, exp) = d {
+                    Value::DataSet(
+                        d.iter().filter(|x| names.contains(x)).cloned().collect(),
+                        d.iter()
+                            .enumerate()
+                            .filter(|(_i, x)| names.contains(x))
+                            .map(|(i, _x)| exp.iter().map(|e| e[i].clone()).collect())
+                            .collect(),
+                    )
+                } else {
+                    panic!(format!("Unexpected argument in projection {:?}", expr));
                 }
             }
         }
