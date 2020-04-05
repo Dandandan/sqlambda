@@ -102,11 +102,7 @@ fn ftv_ty(ty: &Type) -> im::HashSet<String> {
 
 fn ftv_env(env: &im::HashMap<String, Scheme>) -> im::HashSet<String> {
     let ftvs = env.values().map(|x| ftv_ty(&x.1));
-    let mut j = im::HashSet::new();
-    for y in ftvs {
-        j = j.union(y);
-    }
-    j
+    im::HashSet::unions(ftvs)
 }
 
 fn generalize(env: &im::HashMap<String, Scheme>, ty: &Type) -> Scheme {
