@@ -89,7 +89,7 @@ fn compose(subs: Subs, subs2: Subs) -> im::HashMap<String, Type> {
 
 fn ftv_ty(ty: &Type) -> im::HashSet<String> {
     match ty {
-        Type::TyVar(a) => [a].iter().cloned().cloned().collect(),
+        Type::TyVar(a) => [a].iter().cloned().collect(),
         Type::TyArr(ty1, ty2) => {
             let x = ftv_ty(ty1);
             let y = ftv_ty(ty2);
