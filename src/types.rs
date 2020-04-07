@@ -23,6 +23,10 @@ fn get_item_type<'a>(
     items: &Vec<Expr>,
     env: &im::HashMap<String, Scheme>,
 ) -> Result<TypeRes<'a>, String> {
+    if items.is_empty() {
+        return Ok((im::HashMap::new(), Type::TyVar(get_id().to_string())));
+    }
+    // TODO, unify types
     items[0].get_type(env)
 }
 
