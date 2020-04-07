@@ -5,7 +5,7 @@ pub enum Type {
     Int64,
     Int32,
     Float,
-    Dataset(std::collections::HashMap<String, Type>),
+    Dataset(im::HashMap<String, Type>),
     /// T -> U
     TyArr(Box<Type>, Box<Type>),
     /// Type variable
@@ -20,14 +20,20 @@ fn get_id() -> usize {
 }
 
 fn get_item_type<'a>(
-    items: &Vec<Expr>,
+    items: &[Expr],
     env: &im::HashMap<String, Scheme>,
 ) -> Result<TypeRes<'a>, String> {
-    if items.is_empty() {
-        return Ok((im::HashMap::new(), Type::TyVar(get_id().to_string())));
+    let mut ty = Type::TyVar(get_id().to_string());
+
+    for x in items {
+        let (_subs, ty2) = x.get_type(env)?;
+
+        let subs = unify(&ty, &ty2)?;
+
+        ty = apply_sub_type(&subs, &ty);
     }
-    // TODO, unify types
-    items[0].get_type(env)
+
+    Ok((im::HashMap::new(), ty))
 }
 
 type TypeRes<'a> = (im::HashMap<String, Type>, Type);
@@ -143,6 +149,16 @@ fn type_pat(
     unify(case_type, ty)
 }
 
+/// Converts inner type of dataset
+fn convert_inner(
+    env: &im::HashMap<String, Scheme>,
+    key: &str,
+    items: &[Expr],
+) -> Result<(String, Type), String> {
+    let (_s, ty) = get_item_type(items, env)?;
+    Ok((key.to_string(), ty))
+}
+
 // Type inference using http://dev.stephendiehl.com/fun/006_hindley_milner.html#substitution
 impl<'a> Expr<'_> {
     pub fn get_type(&self, env: &im::HashMap<String, Scheme>) -> Result<TypeRes, String> {
@@ -162,11 +178,16 @@ impl<'a> Expr<'_> {
                 Ok((compose(&s1, &s2), t2))
             }
             Expr::DataSet(items) => {
-                let d = items
+                let d: im::HashMap<String, Type> = items
                     .iter()
-                    .map(|(k, v)| (k.to_string(), get_item_type(v, env).unwrap().1))
+                    .map(|(k, items)| convert_inner(env, k, items))
+                    .flatten()
                     .collect();
-                Ok((im::HashMap::new(), Type::Dataset(d)))
+                if d.len() == items.len() {
+                    Ok((im::HashMap::new(), Type::Dataset(d)))
+                } else {
+                    Err("Not all rows matched in type".to_string())
+                }
             }
             Expr::Lambda(name, expr) => {
                 let type_var = Type::TyVar(get_id().to_string()); //fresh();
@@ -296,4 +317,11 @@ fn test_multiple_rows() {
         ty,
         Type::Dataset([("a".to_string(), Type::Int64)].iter().cloned().collect())
     );
+}
+
+#[test]
+fn test_multiple_rows_incompatible() {
+    let (_, expr) = expression(Span::new("let t = {a\n1\n2\n3.0} in t")).unwrap();
+    let ty = expr.get_type(&im::HashMap::new());
+    assert!(ty.is_err());
 }

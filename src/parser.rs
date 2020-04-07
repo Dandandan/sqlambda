@@ -45,7 +45,7 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
         .enumerate()
         .map(|(i, x)| {
             (
-                x.fragment().to_string(),
+                (*x.fragment()).to_string(),
                 rows.iter().map(|r| r[i].clone()).collect(),
             )
         })

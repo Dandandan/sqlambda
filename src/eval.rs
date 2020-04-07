@@ -46,12 +46,10 @@ impl<'a> Expr<'a> {
                     .map(|(x, y)| (x.name.to_string(), y.to_run_expr()))
                     .collect(),
             ),
-            Expr::Projection(p, v) => {
-                return RunExpr::Projection(
-                    p.iter().map(|x| (*x).to_string()).collect(),
-                    Box::new((*v).to_run_expr()),
-                );
-            }
+            Expr::Projection(p, v) => RunExpr::Projection(
+                p.iter().map(|x| (*x).to_string()).collect(),
+                Box::new((*v).to_run_expr()),
+            ),
             _ => unimplemented!(),
         }
     }
