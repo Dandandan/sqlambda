@@ -13,7 +13,7 @@ Code example (current syntax)
 
 ``` sql
 mytable = {a, b
-1, 2,
+1, 2
 3, 4
 }
 
