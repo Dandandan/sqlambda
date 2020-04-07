@@ -20,7 +20,7 @@ fn get_id() -> usize {
 }
 
 fn get_item_type<'a>(
-    items: &Vec<Expr>,
+    items: &[Expr],
     env: &im::HashMap<String, Scheme>,
 ) -> Result<TypeRes<'a>, String> {
     let mut ty = Type::TyVar(get_id().to_string());
@@ -153,7 +153,7 @@ fn type_pat(
 fn convert_inner<'a>(
     env: &im::HashMap<String, Scheme>,
     key: &str,
-    items: &Vec<Expr>,
+    items: &[Expr],
 ) -> Result<(String, Type), String> {
     let (_s, ty) = get_item_type(items, env)?;
     Ok((key.to_string(), ty))
