@@ -1,16 +1,16 @@
 type Bool=True|False
 
-not = \x -> match (x) {True -> False;False -> True}
+not = match {True -> False;False -> True}
 
-or = \x -> \y -> match (x) {True -> True;False -> match (y) {True -> True;False -> False}}
+or = \y -> match {True -> True;False -> y}
 
-and = \x -> \y -> match (x) {False -> False;True -> match (y) {True -> True;False -> False}}
+and = \y -> match {False -> False;True -> y}
 
 empty = {}
 
 
 identity = \x -> x
 
-fst = \x -> \y -> x
+fst = \x y -> x
 
-snd = \x -> \y -> y
+snd = \x y -> y

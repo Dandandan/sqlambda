@@ -40,10 +40,17 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
 
     let (i, _) = tag("}")(i)?;
 
-    Ok((
-        i,
-        Expr::DataSet(header.iter().map(|x| (*x.fragment())).collect(), rows),
-    ))
+    let lines = header
+        .iter()
+        .enumerate()
+        .map(|(i, x)| {
+            (
+                x.fragment().to_string(),
+                rows.iter().map(|r| r[i].clone()).collect(),
+            )
+        })
+        .collect();
+    Ok((i, Expr::DataSet(lines)))
 }
 
 fn let_in_expr(input: Span) -> IResult<Span, Expr> {
@@ -104,27 +111,32 @@ fn match_with_expr(input: Span) -> IResult<Span, Expr> {
     // match <e1> with <p1> -> <e2>, [<p2> => e2..]
 
     let (i, _) = tag("match")(input)?;
-    let (i, _) = space0(i)?;
 
-    let (i, _) = char('(')(i)?;
-    let (i, _) = space0(i)?;
-
-    let (i, expr1) = expression(i)?;
-    let (i, _) = space0(i)?;
-
-    let (i, _) = char(')')(i)?;
+    let (i, expr1) = opt(expression)(i)?;
 
     let (i, _) = space0(i)?;
 
     let (i, _) = char('{')(i)?;
     let (i, _) = space0(i)?;
 
-    let (i, patterns) = separated_list(pair(char(';'), space0), pattern_expr)(i)?;
-    let (i, _) = space0(i)?;
+    let (pat_spn, patterns) = separated_list(pair(char(';'), space0), pattern_expr)(i)?;
+    let (i, _) = space0(pat_spn)?;
 
     let (i, _) = char('}')(i)?;
 
-    Ok((i, Expr::Match(Box::new(expr1), patterns)))
+    match expr1 {
+        None => Ok((
+            i,
+            Expr::Lambda(
+                "$x",
+                Box::new(AnnotatedExpr {
+                    expr: Expr::Match(Box::new(Expr::Ref("$x")), patterns),
+                    span: pat_spn,
+                }),
+            ),
+        )),
+        Some(x) => Ok((i, Expr::Match(Box::new(x), patterns))),
+    }
 }
 
 fn comment(input: Span) -> IResult<Span, Expr> {
@@ -210,7 +222,10 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
 
     let (i, _) = char('\\')(i)?;
 
-    let (i, name) = identifier(i)?;
+    let (i, binding) = identifier(i)?;
+
+    let (i, _) = space0(i)?;
+    let (i, bindings) = separated_list(space1, identifier)(i)?;
 
     let (i, _) = space0(i)?;
 
@@ -218,10 +233,16 @@ fn lambda(i: Span) -> IResult<Span, Expr> {
 
     let (i, _) = space0(i)?;
 
-    let (i, expr) = expression(i)?;
+    let (i, mut expr) = expression(i)?;
+    for x in bindings.iter().rev() {
+        expr = Expr::Lambda(x.fragment(), Box::new(AnnotatedExpr { span: *x, expr }));
+    }
     Ok((
         i,
-        Expr::Lambda(name.fragment(), Box::new(AnnotatedExpr { span: pos, expr })),
+        Expr::Lambda(
+            binding.fragment(),
+            Box::new(AnnotatedExpr { span: pos, expr }),
+        ),
     ))
 }
 
@@ -238,10 +259,33 @@ fn grouped_expr(i: Span) -> IResult<Span, Expr> {
     Ok((i, expr))
 }
 
+fn select(i: Span) -> IResult<Span, Expr> {
+    let (i, _) = tag("select")(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, pr) = separated_list(char(','), identifier)(i)?;
+
+    let (i, _) = space0(i)?;
+
+    let (i, _) = tag("from")(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, expr) = expression(i)?;
+    Ok((
+        i,
+        Expr::Projection(
+            pr.iter().map(|x| x.fragment()).cloned().collect(),
+            Box::new(expr),
+        ),
+    ))
+}
+
 pub fn one_expression(i: Span) -> IResult<Span, Expr> {
     let (i, _) = space0(i)?;
 
     alt((
+        select,
         grouped_expr,
         let_in_expr,
         match_with_expr,
@@ -357,13 +401,17 @@ pub enum Expr<'a> {
     // Let in expression
     LetIn(LetIn<'a>),
     // DataSet expressions
-    DataSet(Vec<&'a str>, Vec<Vec<Expr<'a>>>),
+    DataSet(std::collections::HashMap<String, Vec<Expr<'a>>>),
     // Lambda
     Lambda(&'a str, Box<AnnotatedExpr<'a>>),
     // Application
     App(Box<Expr<'a>>, Box<Expr<'a>>),
     // Pattern matching (TODO only patterns)
     Match(Box<Expr<'a>>, Vec<(Pattern<'a>, Expr<'a>)>),
+
+    // Projection (map); currently without applying functions
+    // select a, b from t
+    Projection(Vec<&'a str>, Box<Expr<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -521,11 +569,13 @@ fn test_table_literal() {
         assert_eq!(
             eq.expr.expr,
             Expr::DataSet(
-                vec!["a", "b"],
-                vec![vec![
-                    Expr::Literal(Literal::Int64(1)),
-                    Expr::Literal(Literal::Int64(2))
-                ]]
+                [
+                    ("a".to_string(), vec![Expr::Literal(Literal::Int64(1))]),
+                    ("b".to_string(), vec![Expr::Literal(Literal::Int64(2))])
+                ]
+                .iter()
+                .cloned()
+                .collect()
             )
         );
     }
@@ -562,4 +612,24 @@ fn test_match_with_multi() {
 
     assert!(res.is_ok());
     assert!(matches!(res.unwrap().1, Expr::Match(e, _v) if *e == Expr::Ref("X")));
+}
+
+#[test]
+fn test_match_shorthand() {
+    let res = expression(Span::new(r"match {y -> z;a -> n}"));
+
+    assert!(res.is_ok());
+    assert!(matches!(
+        res.unwrap().1,
+        Expr::Lambda(_x, x)
+        if matches!(x.clone().expr, Expr::Match(_x, _v))
+    ));
+}
+
+#[test]
+fn test_sql_projection() {
+    let res = expression(Span::new(r"select a from t"));
+
+    assert!(res.is_ok());
+    assert!(matches!(res.clone().unwrap().1, Expr::Projection(e, _v) if e[0] == "a"));
 }
