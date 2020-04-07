@@ -5,7 +5,7 @@ pub enum Type {
     Int64,
     Int32,
     Float,
-    Dataset(Vec<String>, Vec<Type>),
+    Dataset(std::collections::HashMap<String, Type>),
     /// T -> U
     TyArr(Box<Type>, Box<Type>),
     /// Type variable
@@ -14,33 +14,16 @@ pub enum Type {
     TyCon(String),
 }
 
-fn get_item_types_inner(
-    items: &[Vec<Expr>],
-    index: usize,
-    env: &im::HashMap<String, Scheme>,
-) -> Type {
-    let values = items.iter().map(|y| y.get(index).unwrap().clone());
-
-    values
-        .map(|x| x.get_type(env).unwrap().1)
-        // TODO collect substitions
-        .collect::<Vec<Type>>()
-        .get(0)
-        .unwrap()
-        .clone()
-}
-
 static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
 fn get_id() -> usize {
     COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-fn get_item_types(items: &[Vec<Expr>], env: &im::HashMap<String, Scheme>) -> Vec<Type> {
-    items
-        .iter()
-        .enumerate()
-        .map(|(i, _)| get_item_types_inner(items, i, env))
-        .collect()
+fn get_item_type<'a>(
+    items: &Vec<Expr>,
+    env: &im::HashMap<String, Scheme>,
+) -> Result<TypeRes<'a>, String> {
+    items[0].get_type(env)
 }
 
 type TypeRes<'a> = (im::HashMap<String, Type>, Type);
@@ -174,18 +157,12 @@ impl<'a> Expr<'_> {
                 let (s2, t2) = x.expr2.expr.get_type(&extended_ty)?;
                 Ok((compose(&s1, &s2), t2))
             }
-            Expr::DataSet(names, items) => {
-                let mut items = get_item_types(items, env);
-                if items.is_empty() {
-                    items = names
-                        .iter()
-                        .map(|_| Type::TyVar(get_id().to_string()))
-                        .collect()
-                }
-                Ok((
-                    im::HashMap::new(),
-                    Type::Dataset(names.iter().map(|x| (*x).to_string()).collect(), items),
-                ))
+            Expr::DataSet(items) => {
+                let d = items
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), get_item_type(v, env).unwrap().1))
+                    .collect();
+                Ok((im::HashMap::new(), Type::Dataset(d)))
             }
             Expr::Lambda(name, expr) => {
                 let type_var = Type::TyVar(get_id().to_string()); //fresh();
@@ -228,10 +205,10 @@ impl<'a> Expr<'_> {
             Expr::Projection(names, expr) => {
                 let from_ty = expr.get_type(env)?;
                 match from_ty {
-                    (_s, Type::Dataset(ids, ty)) => {
+                    (_s, Type::Dataset(items)) => {
                         if names
                             .iter()
-                            .filter(|x| !ids.contains(&x.to_string()))
+                            .filter(|x| !items.contains_key(&x.to_string()))
                             .count()
                             > 0
                         {
@@ -241,14 +218,10 @@ impl<'a> Expr<'_> {
                         Ok((
                             im::HashMap::new(),
                             Type::Dataset(
-                                ids.iter()
-                                    .filter(|&x| names.contains(&&*x.to_string()))
-                                    .cloned()
-                                    .collect(),
-                                ids.iter()
-                                    .enumerate()
-                                    .filter(|(_i, x)| names.contains(&&*x.to_string()))
-                                    .map(|(i, _)| ty[i].clone())
+                                items
+                                    .iter()
+                                    .filter(|(k, _v)| names.contains(&&*k.to_string()))
+                                    .map(|(k, v)| (k.to_string(), v.clone()))
                                     .collect(),
                             ),
                         ))
@@ -305,5 +278,18 @@ fn test_type_lam_app() {
 fn test_type_sql() {
     let (_, expr) = expression(Span::new("let t = {a\n1} in select a from t")).unwrap();
     let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
-    assert_eq!(ty, Type::Dataset(vec!["a".to_string()], vec![Type::Int64]));
+    assert_eq!(
+        ty,
+        Type::Dataset([("a".to_string(), Type::Int64)].iter().cloned().collect())
+    );
+}
+
+#[test]
+fn test_multiple_rows() {
+    let (_, expr) = expression(Span::new("let t = {a\n1\n2\n3} in t")).unwrap();
+    let ty = expr.get_type(&im::HashMap::new()).unwrap().1;
+    assert_eq!(
+        ty,
+        Type::Dataset([("a".to_string(), Type::Int64)].iter().cloned().collect())
+    );
 }

@@ -40,10 +40,17 @@ fn table_literal(input: Span) -> IResult<Span, Expr> {
 
     let (i, _) = tag("}")(i)?;
 
-    Ok((
-        i,
-        Expr::DataSet(header.iter().map(|x| (*x.fragment())).collect(), rows),
-    ))
+    let lines = header
+        .iter()
+        .enumerate()
+        .map(|(i, x)| {
+            (
+                x.fragment().to_string(),
+                rows.iter().map(|r| r[i].clone()).collect(),
+            )
+        })
+        .collect();
+    Ok((i, Expr::DataSet(lines)))
 }
 
 fn let_in_expr(input: Span) -> IResult<Span, Expr> {
@@ -394,7 +401,7 @@ pub enum Expr<'a> {
     // Let in expression
     LetIn(LetIn<'a>),
     // DataSet expressions
-    DataSet(Vec<&'a str>, Vec<Vec<Expr<'a>>>),
+    DataSet(std::collections::HashMap<String, Vec<Expr<'a>>>),
     // Lambda
     Lambda(&'a str, Box<AnnotatedExpr<'a>>),
     // Application
@@ -562,11 +569,13 @@ fn test_table_literal() {
         assert_eq!(
             eq.expr.expr,
             Expr::DataSet(
-                vec!["a", "b"],
-                vec![vec![
-                    Expr::Literal(Literal::Int64(1)),
-                    Expr::Literal(Literal::Int64(2))
-                ]]
+                [
+                    ("a".to_string(), vec![Expr::Literal(Literal::Int64(1))]),
+                    ("b".to_string(), vec![Expr::Literal(Literal::Int64(2))])
+                ]
+                .iter()
+                .cloned()
+                .collect()
             )
         );
     }

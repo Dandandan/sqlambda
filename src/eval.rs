@@ -9,7 +9,7 @@ pub enum RunExpr {
     Ref(String),
     LetIn(String, Box<RunExpr>, Box<RunExpr>),
     Value(Literal),
-    DataSet(Vec<String>, Vec<Vec<RunExpr>>),
+    DataSet(std::collections::HashMap<String, Vec<RunExpr>>),
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
     Match(Box<RunExpr>, Vec<(String, RunExpr)>),
@@ -27,11 +27,10 @@ impl<'a> Expr<'a> {
             Expr::Literal(l) => RunExpr::Value(l.to_owned()),
             Expr::Ref(v) => RunExpr::Ref((*v).to_string()),
 
-            Expr::DataSet(header, values) => RunExpr::DataSet(
-                header.iter().map(|x| (*x).to_string()).collect(),
-                values
+            Expr::DataSet(items) => RunExpr::DataSet(
+                items
                     .iter()
-                    .map(|v| v.iter().map(|x| x.to_run_expr()).collect())
+                    .map(|(x, y)| (x.to_string(), y.iter().map(|e| e.to_run_expr()).collect()))
                     .collect(),
             ),
             Expr::Lambda(name, y) => {
@@ -63,7 +62,7 @@ pub enum Value {
     Float(f64),
     Int64(i64),
     Int32(i32),
-    DataSet(Vec<String>, Vec<Vec<Value>>),
+    DataSet(std::collections::HashMap<String, Vec<Value>>),
     FnClosure(String, Box<RunExpr>, im::HashMap<String, Value>),
 }
 
@@ -86,10 +85,10 @@ impl RunExpr {
             }
             RunExpr::Ref(r) => e.get(r).unwrap().clone(),
             RunExpr::Value(l) => l.to_value(),
-            RunExpr::DataSet(l, m) => Value::DataSet(
-                l.clone(),
-                m.iter()
-                    .map(|y| y.iter().map(|x| x.eval(e)).collect())
+            RunExpr::DataSet(items) => Value::DataSet(
+                items
+                    .iter()
+                    .map(|(x, y)| (x.to_string(), y.iter().map(|z| z.eval(e)).collect()))
                     .collect(),
             ),
             RunExpr::Lambda(name, expr) => {
@@ -121,13 +120,12 @@ impl RunExpr {
             RunExpr::Projection(names, expr) => {
                 // TODO don't evaluate whole dataset
                 let d = expr.eval(e);
-                if let Value::DataSet(d, exp) = d {
+                if let Value::DataSet(items) = d {
                     Value::DataSet(
-                        d.iter().filter(|x| names.contains(x)).cloned().collect(),
-                        d.iter()
-                            .enumerate()
-                            .filter(|(_i, x)| names.contains(x))
-                            .map(|(i, _x)| exp.iter().map(|e| e[i].clone()).collect())
+                        items
+                            .iter()
+                            .filter(|(i, _x)| names.contains(*i))
+                            .map(|(i, x)| (i.to_string(), x.clone()))
                             .collect(),
                     )
                 } else {
