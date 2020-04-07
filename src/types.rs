@@ -150,7 +150,7 @@ fn type_pat(
 }
 
 /// Converts inner type of dataset
-fn convert_inner<'a>(
+fn convert_inner(
     env: &im::HashMap<String, Scheme>,
     key: &str,
     items: &[Expr],
