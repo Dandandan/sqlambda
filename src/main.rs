@@ -1,4 +1,3 @@
-use std::io;
 mod display;
 mod eval;
 mod parser;
@@ -6,6 +5,7 @@ mod types;
 use eval::Value;
 use parser::{Decl, Equation, Span, TypeDef};
 use std::io::stdin;
+use tokio_postgres::{Error, NoTls};
 use types::{Scheme, Type};
 
 pub fn exec(s: &str, type_env: &im::HashMap<String, Scheme>, env: &im::HashMap<String, Value>) {
@@ -62,13 +62,39 @@ fn load_module<B>(
     (type_env, env)
 }
 
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let file = include_str!("base.sqla");
 
     let module = parser::parse_module(parser::Span::new(&file));
 
     let (type_env, env) = load_module(module);
     println!("Ok, modules loaded");
+
+    let (client, connection) = tokio_postgres::connect(
+        "postgresql://postgres:postgres@localhost:5432/postgres",
+        NoTls,
+    )
+    .await?;
+
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    // Now we can execute a simple statement that just returns its parameter.
+
+    // And then check that we got back the same string we sent over.
+    let y = client
+        .query("CREATE TABLE IF NOT EXISTS t AS SELECT 1 s", &[])
+        .await?;
+    println!("{:?}", y);
+    let rows = client.query("SELECT s FROM t", &[]).await?;
+    let value: i32 = rows[0].get(0);
+    println!("{}", value);
 
     loop {
         let mut s = String::new();
