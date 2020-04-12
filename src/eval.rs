@@ -9,7 +9,7 @@ pub enum RunExpr {
     Ref(String),
     LetIn(String, Box<RunExpr>, Box<RunExpr>),
     Value(Literal),
-    DataSet(std::collections::HashMap<String, Vec<RunExpr>>),
+    DataSet(im::HashMap<String, Vec<RunExpr>>),
     Lambda(String, Box<RunExpr>),
     App(Box<RunExpr>, Box<RunExpr>),
     Match(Box<RunExpr>, Vec<(String, RunExpr)>),
