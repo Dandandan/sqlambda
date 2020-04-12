@@ -55,8 +55,8 @@ fn apply_sub_type(subs: Subs, ty: &Type) -> Type {
 
 fn apply_sub_scheme(subs: Subs, scheme: Scheme) -> Scheme {
     let mut subs1 = subs.clone();
-    for key in scheme.0.clone().into_iter() {
-        subs1 = subs1.alter(|_x| Option::None, key);
+    for key in scheme.0.iter() {
+        subs1 = subs1.without(key);
     }
     let ty = apply_sub_type(&subs1, &scheme.1);
     (scheme.0, ty)
