@@ -8,7 +8,6 @@ and = \y -> match {False -> False;True -> y}
 
 empty = {}
 
-
 identity = \x -> x
 
 fst = \x y -> x

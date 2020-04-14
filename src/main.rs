@@ -3,7 +3,7 @@ mod eval;
 mod parser;
 mod types;
 use eval::Value;
-use parser::{Decl, Equation, Span, TypeDef};
+use parser::{Decl, Equation, Span, Table, TypeDef};
 use std::io::stdin;
 use tokio_postgres::{Error, NoTls};
 use types::{Scheme, Type};
@@ -37,6 +37,7 @@ fn load_module<B>(
     if let Ok((_, b)) = module {
         for decl in b {
             match decl {
+                // TODO, separate loading and type checking
                 Decl::Equation(Equation { expr, name, .. }) => {
                     let type_res = expr.expr.get_type(&type_env);
                     if let Ok(ty) = type_res {
@@ -55,11 +56,50 @@ fn load_module<B>(
                         env = env.update((*x).to_string(), Value::Constant((*x).to_string()));
                     }
                 }
+
+                Decl::Table(Table { name, fields, .. }) => {
+                    // TODO
+                }
             }
         }
     }
 
     (type_env, env)
+}
+
+struct Postgres {
+    client: tokio_postgres::Client,
+}
+
+impl Postgres {
+    async fn connect(
+        username: &str,
+        password: &str,
+        host: &str,
+        port: &str,
+        database: &str,
+    ) -> Result<Self, Error> {
+        let (client, connection) = tokio_postgres::connect(
+            &format!(
+                "postgresql://{}:{}@{}:{}/{}",
+                username, password, host, port, database
+            ),
+            NoTls,
+        )
+        .await?;
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                println!("connection error: {}", e);
+            }
+        });
+        Ok(Postgres { client })
+    }
+
+    async fn exec(&self, sql: &str) -> Result<Vec<tokio_postgres::Row>, Error> {
+        let x = self.client.query(sql, &[]).await?;
+
+        Ok(x)
+    }
 }
 
 #[tokio::main]
@@ -71,28 +111,10 @@ async fn main() -> Result<(), Error> {
     let (type_env, env) = load_module(module);
     println!("Ok, modules loaded");
 
-    let (client, connection) = tokio_postgres::connect(
-        "postgresql://postgres:postgres@localhost:5432/postgres",
-        NoTls,
-    )
-    .await?;
-
-    // The connection object performs the actual communication with the database,
-    // so spawn it off to run on its own.
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
-
-    // Now we can execute a simple statement that just returns its parameter.
-
-    // And then check that we got back the same string we sent over.
-    let y = client
-        .query("CREATE TABLE IF NOT EXISTS t AS SELECT 1 s", &[])
-        .await?;
-    println!("{:?}", y);
-    let rows = client.query("SELECT s FROM t", &[]).await?;
+    // TODO make configurable, integrate
+    let p = Postgres::connect("postgres", "postgres", "localhost", "5432", "postgres").await?;
+    let _f = p.exec("CREATE TABLE IF NOT EXISTS t AS SELECT 1 s").await?;
+    let rows = p.exec("SELECT s FROM t").await?;
     let value: i32 = rows[0].get(0);
     println!("{}", value);
 
