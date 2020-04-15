@@ -1,11 +1,11 @@
-use std::io;
 mod display;
 mod eval;
 mod parser;
 mod types;
 use eval::Value;
-use parser::{Decl, Equation, Span, TypeDef};
+use parser::{Decl, Equation, Span, Table, TypeDef};
 use std::io::stdin;
+use tokio_postgres::{Error, NoTls};
 use types::{Scheme, Type};
 
 pub fn exec(s: &str, type_env: &im::HashMap<String, Scheme>, env: &im::HashMap<String, Value>) {
@@ -37,6 +37,7 @@ fn load_module<B>(
     if let Ok((_, b)) = module {
         for decl in b {
             match decl {
+                // TODO, separate loading and type checking
                 Decl::Equation(Equation { expr, name, .. }) => {
                     let type_res = expr.expr.get_type(&type_env);
                     if let Ok(ty) = type_res {
@@ -55,6 +56,10 @@ fn load_module<B>(
                         env = env.update((*x).to_string(), Value::Constant((*x).to_string()));
                     }
                 }
+
+                Decl::Table(Table { name, fields, .. }) => {
+                    // TODO
+                }
             }
         }
     }
@@ -62,13 +67,56 @@ fn load_module<B>(
     (type_env, env)
 }
 
-fn main() -> io::Result<()> {
+struct Postgres {
+    client: tokio_postgres::Client,
+}
+
+impl Postgres {
+    async fn connect(
+        username: &str,
+        password: &str,
+        host: &str,
+        port: &str,
+        database: &str,
+    ) -> Result<Self, Error> {
+        let (client, connection) = tokio_postgres::connect(
+            &format!(
+                "postgresql://{}:{}@{}:{}/{}",
+                username, password, host, port, database
+            ),
+            NoTls,
+        )
+        .await?;
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                println!("connection error: {}", e);
+            }
+        });
+        Ok(Postgres { client })
+    }
+
+    async fn exec(&self, sql: &str) -> Result<Vec<tokio_postgres::Row>, Error> {
+        let x = self.client.query(sql, &[]).await?;
+
+        Ok(x)
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let file = include_str!("base.sqla");
 
     let module = parser::parse_module(parser::Span::new(&file));
 
     let (type_env, env) = load_module(module);
     println!("Ok, modules loaded");
+
+    // TODO make configurable, integrate
+    let p = Postgres::connect("postgres", "postgres", "localhost", "5432", "postgres").await?;
+    let _f = p.exec("CREATE TABLE IF NOT EXISTS t AS SELECT 1 s").await?;
+    let rows = p.exec("SELECT s FROM t").await?;
+    let value: i32 = rows[0].get(0);
+    println!("{}", value);
 
     loop {
         let mut s = String::new();

@@ -159,7 +159,14 @@ fn identifier(i: Span) -> IResult<Span, Span> {
     let (i, id) = alpha1(i)?;
     // reserved key words
     let f = id.fragment();
-    if f == &"let" || f == &"in" || f == &"=" || f == &"type" || f == &"match" || f == &"with" {
+    if f == &"let"
+        || f == &"in"
+        || f == &"="
+        || f == &"table"
+        || f == &"type"
+        || f == &"match"
+        || f == &"with"
+    {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
     Ok((i, id))
@@ -312,7 +319,6 @@ pub fn expression(i: Span) -> IResult<Span, Expr> {
 
 pub fn parse_equation(i: Span) -> IResult<Span, Decl> {
     let (i, _) = many0(char('\n'))(i)?;
-
     let (_, pos) = position(i)?;
 
     let (i, name) = identifier(i)?;
@@ -336,8 +342,9 @@ pub fn parse_equation(i: Span) -> IResult<Span, Decl> {
 }
 
 pub fn parse_type_def(i: Span) -> IResult<Span, Decl> {
+    let (i, _) = many0(char('\n'))(i)?;
     let (i, _) = tag("type")(i)?;
-    let (i, _) = space0(i)?;
+    let (i, _) = space1(i)?;
     let (_, pos) = position(i)?;
 
     let (i, name) = identifier(i)?;
@@ -356,6 +363,35 @@ pub fn parse_type_def(i: Span) -> IResult<Span, Decl> {
         }),
     ))
 }
+
+pub fn parse_table(i: Span) -> IResult<Span, Decl> {
+    let (i, _) = many0(char('\n'))(i)?;
+
+    let (i, _) = tag("table")(i)?;
+
+    let (i, _) = space1(i)?;
+    let (_, pos) = position(i)?;
+
+    let (i, name) = identifier(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('=')(i)?;
+
+    let (i, _) = space0(i)?;
+    let (i, _) = char('{')(i)?;
+
+    let (i, fields) = separated_list(char(','), identifier)(i)?;
+    let (i, _) = char('}')(i)?;
+
+    Ok((
+        i,
+        Decl::Table(Table {
+            name: &name.fragment(),
+            fields: fields.iter().map(|x| x.fragment()).cloned().collect(),
+            span: pos,
+        }),
+    ))
+}
 #[derive(Debug, PartialEq, Clone)]
 pub struct AnnotatedExpr<'a> {
     pub expr: Expr<'a>,
@@ -365,7 +401,7 @@ pub struct AnnotatedExpr<'a> {
 }
 
 pub fn parse_module(i: Span) -> IResult<Span, Vec<Decl>> {
-    many0(alt((parse_equation, parse_type_def)))(i)
+    many0(alt((parse_equation, parse_table, parse_type_def)))(i)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -373,7 +409,11 @@ pub enum Decl<'a> {
     /// Binds an expression to a name
     Equation(Equation<'a>),
 
+    // ADT definition
     TypeDef(TypeDef<'a>),
+
+    // External table definition
+    Table(Table<'a>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -387,6 +427,13 @@ pub struct Equation<'a> {
 pub struct TypeDef<'a> {
     pub name: &'a str,
     pub alts: Vec<&'a str>,
+    span: Span<'a>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Table<'a> {
+    pub name: &'a str,
+    pub fields: Vec<&'a str>,
     span: Span<'a>,
 }
 
@@ -595,6 +642,16 @@ fn test_type_res() {
     assert!(res.is_ok());
     assert!(
         matches!(res.unwrap().1.as_slice(), [Decl::TypeDef(TypeDef{name: "X", alts, .. })] if *alts == ["a", "b"])
+    );
+}
+
+#[test]
+fn test_table() {
+    let res = parse_module(Span::new(r"table X={x}"));
+
+    assert!(res.is_ok());
+    assert!(
+        matches!(res.unwrap().1.as_slice(), [Decl::Table(Table{name: "X", fields, .. })] if *fields == ["x"])
     );
 }
 
