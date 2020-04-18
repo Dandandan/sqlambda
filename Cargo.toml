@@ -10,8 +10,7 @@ edition = "2018"
 nom = "5"
 nom_locate = "*"
 im = "14"
-tokio = { version = "*", features = ["full"] }
-tokio-postgres = "*"
+postgres = "*"
 
 [dev-dependencies]
 criterion = "0.3"

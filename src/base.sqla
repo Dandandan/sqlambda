@@ -10,6 +10,8 @@ empty = {}
 
 identity = \x -> x
 
+table X={x}
+
 fst = \x y -> x
 
 snd = \x y -> y

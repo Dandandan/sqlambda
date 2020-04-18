@@ -6,6 +6,10 @@ pub enum Type {
     Int32,
     Float,
     Dataset(im::HashMap<String, Type>),
+
+    /// Dataset based on data in database
+    ExternalDataset(im::HashMap<String, Type>),
+
     /// T -> U
     TyArr(Box<Type>, Box<Type>),
     /// Type variable
@@ -230,7 +234,7 @@ impl<'a> Expr<'_> {
             Expr::Projection(names, expr) => {
                 let from_ty = expr.get_type(env)?;
                 match from_ty {
-                    (_s, Type::Dataset(items)) => {
+                    (_s, Type::Dataset(items)) | (_s, Type::ExternalDataset(items)) => {
                         if names
                             .iter()
                             .filter(|x| !items.contains_key(&x.to_string()))

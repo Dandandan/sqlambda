@@ -43,6 +43,7 @@ impl fmt::Display for Value {
             Value::DataSet(map) => write!(f, "{:?}", map),
             Value::FnClosure(_, _, _) => write!(f, "fun"),
             Value::Constant(s) => write!(f, "{}", s),
+            Value::Table(s) => write!(f, "table {}", s),
         }
     }
 }
