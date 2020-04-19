@@ -11,6 +11,7 @@ empty = {}
 identity = \x -> x
 
 table X={x}
+model Y=select x from X
 
 fst = \x y -> x
 

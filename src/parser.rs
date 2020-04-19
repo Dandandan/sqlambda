@@ -392,6 +392,33 @@ pub fn parse_table(i: Span) -> IResult<Span, Decl> {
         }),
     ))
 }
+
+pub fn parse_model(i: Span) -> IResult<Span, Decl> {
+    let (i, _) = many0(char('\n'))(i)?;
+
+    let (i, _) = tag("model")(i)?;
+
+    let (i, _) = space1(i)?;
+    let (_, pos) = position(i)?;
+
+    let (i, name) = identifier(i)?;
+    let (i, _) = space0(i)?;
+
+    let (i, _) = char('=')(i)?;
+
+    let (_, pos2) = position(i)?;
+
+    let (i, expr) = expression(i)?;
+
+    Ok((
+        i,
+        Decl::Model(Model {
+            name: &name.fragment(),
+            span: pos,
+            expr: Box::new(AnnotatedExpr { span: pos2, expr }),
+        }),
+    ))
+}
 #[derive(Debug, PartialEq, Clone)]
 pub struct AnnotatedExpr<'a> {
     pub expr: Expr<'a>,
@@ -401,7 +428,12 @@ pub struct AnnotatedExpr<'a> {
 }
 
 pub fn parse_module(i: Span) -> IResult<Span, Vec<Decl>> {
-    many0(alt((parse_equation, parse_table, parse_type_def)))(i)
+    many0(alt((
+        parse_equation,
+        parse_table,
+        parse_model,
+        parse_type_def,
+    )))(i)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -414,6 +446,9 @@ pub enum Decl<'a> {
 
     // External table definition
     Table(Table<'a>),
+
+    // Model definition
+    Model(Model<'a>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -434,6 +469,13 @@ pub struct TypeDef<'a> {
 pub struct Table<'a> {
     pub name: &'a str,
     pub fields: Vec<&'a str>,
+    span: Span<'a>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Model<'a> {
+    pub name: &'a str,
+    pub expr: Box<AnnotatedExpr<'a>>,
     span: Span<'a>,
 }
 
@@ -653,6 +695,14 @@ fn test_table() {
     assert!(
         matches!(res.unwrap().1.as_slice(), [Decl::Table(Table{name: "X", fields, .. })] if *fields == ["x"])
     );
+}
+
+#[test]
+fn test_model() {
+    let res = parse_module(Span::new(r"model Y=select x from t"));
+
+    assert!(res.is_ok());
+    assert!(matches!(res.unwrap().1.as_slice(), [Decl::Model(Model{name: "Y", .. })]));
 }
 
 #[test]

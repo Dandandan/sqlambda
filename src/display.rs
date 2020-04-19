@@ -1,4 +1,4 @@
-use super::eval::Value;
+use super::eval::{Query, Value};
 use super::parser::{Expr, Literal};
 use super::types::Type;
 
@@ -44,6 +44,7 @@ impl fmt::Display for Value {
             Value::FnClosure(_, _, _) => write!(f, "fun"),
             Value::Constant(s) => write!(f, "{}", s),
             Value::Table(s) => write!(f, "table {}", s),
+            Value::QueryIO(query) => write!(f, "!{:?}", query),
         }
     }
 }

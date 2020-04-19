@@ -65,6 +65,13 @@ pub enum Value {
     DataSet(std::collections::HashMap<String, Vec<Value>>),
     Table(String),
     FnClosure(String, Box<RunExpr>, im::HashMap<String, Value>),
+    QueryIO(Query),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Query {
+    // Projection
+    Projection(Vec<String>, Box<Value>),
 }
 
 impl<'a> Literal {
@@ -77,41 +84,41 @@ impl<'a> Literal {
     }
 }
 impl RunExpr {
-    pub fn eval(&self, e: &im::HashMap<String, Value>, client: &mut Postgres) -> Value {
+    pub fn eval(&self, e: &im::HashMap<String, Value>) -> Value {
         match self {
             RunExpr::LetIn(name, expr1, expr2) => {
-                let r = expr1.eval(e, client);
+                let r = expr1.eval(e);
                 let m = e.update(name.to_string(), r);
-                expr2.eval(&m, client)
+                expr2.eval(&m)
             }
             RunExpr::Ref(r) => e.get(r).unwrap().clone(),
             RunExpr::Value(l) => l.to_value(),
             RunExpr::DataSet(items) => Value::DataSet(
                 items
                     .iter()
-                    .map(|(x, y)| (x.to_string(), y.iter().map(|z| z.eval(e, client)).collect()))
+                    .map(|(x, y)| (x.to_string(), y.iter().map(|z| z.eval(e)).collect()))
                     .collect(),
             ),
             RunExpr::Lambda(name, expr) => {
                 Value::FnClosure(name.to_string(), expr.clone(), e.clone())
             }
             RunExpr::Match(expr, exprs) => {
-                let v1 = expr.eval(e, client);
+                let v1 = expr.eval(e);
                 // TODO: optimize
                 for arm in exprs {
                     if Value::Constant(arm.0.to_string()) == v1 {
-                        return arm.1.eval(e, client);
+                        return arm.1.eval(e);
                     }
                 }
                 panic!("Non-exhaustive pattern match");
             }
             RunExpr::App(e1, arg) => {
-                let x = e1.eval(e, client);
+                let x = e1.eval(e);
                 match x {
                     Value::FnClosure(x, body, clo) => {
-                        let argv = arg.eval(e, client);
+                        let argv = arg.eval(e);
                         let nenv = clo.update(x, argv);
-                        body.eval(&nenv, client)
+                        body.eval(&nenv)
                     }
                     _ => {
                         panic!("Expected fn-clusure here");
@@ -119,25 +126,23 @@ impl RunExpr {
                 }
             }
             RunExpr::Projection(names, expr) => {
-                // TODO don't evaluate whole dataset
-                let d = expr.eval(e, client);
-                if let Value::DataSet(items) = d {
-                    Value::DataSet(
+                let d = expr.eval(e);
+                match d {
+                    Value::DataSet(items) => Value::DataSet(
                         items
                             .iter()
                             .filter(|(i, _x)| names.contains(*i))
                             .map(|(i, x)| (i.to_string(), x.clone()))
                             .collect(),
-                    )
-                } else {
-                    panic!(format!("Unexpected argument in projection {:?}", d))
+                    ),
+                    Value::Table(name) => Value::QueryIO(Query::Projection(
+                        names.clone(),
+                        Box::new(Value::Table(name)),
+                    )),
+                    _ => panic!(format!("Unexpected argument in projection {:?}", d)),
                 }
             }
-            RunExpr::Table(name) => {
-                let str = &format!("SELECT s FROM {}", name);
-                let rows = client.exec(str);
-                unimplemented!()
-            }
+            RunExpr::Table(name) => Value::Table((*name).to_string()),
         }
     }
 }
@@ -145,37 +150,37 @@ impl RunExpr {
 #[cfg(test)]
 use super::parser::{expression, Span};
 
-// #[test]
-// fn test_eval() {
-//     assert_eq!(
-//         RunExpr::Value(Literal::Int64(1)).eval(&im::HashMap::new()),
-//         Value::Int64(1)
-//     );
-// }
-// #[test]
-// fn test_eval_let_lam_app() {
-//     let (_, expr) = expression(Span::new(r"let id = \x -> x in id 1")).unwrap();
-//     let res = expr.to_run_expr().eval(&im::HashMap::new());
-//     assert_eq!(res, Value::Int64(1));
-// }
+#[test]
+fn test_eval() {
+    assert_eq!(
+        RunExpr::Value(Literal::Int64(1)).eval(&im::HashMap::new()),
+        Value::Int64(1)
+    );
+}
+#[test]
+fn test_eval_let_lam_app() {
+    let (_, expr) = expression(Span::new(r"let id = \x -> x in id 1")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(1));
+}
 
-// #[test]
-// fn test_eval_let_lam_app_fst() {
-//     let (_, expr) = expression(Span::new(r"let fst = \x -> \y -> x in fst 1 2")).unwrap();
-//     let res = expr.to_run_expr().eval(&im::HashMap::new());
-//     assert_eq!(res, Value::Int64(1));
-// }
+#[test]
+fn test_eval_let_lam_app_fst() {
+    let (_, expr) = expression(Span::new(r"let fst = \x -> \y -> x in fst 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(1));
+}
 
-// #[test]
-// fn test_eval_let_lam_app_snd() {
-//     let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
-//     let res = expr.to_run_expr().eval(&im::HashMap::new());
-//     assert_eq!(res, Value::Int64(2));
-// }
+#[test]
+fn test_eval_let_lam_app_snd() {
+    let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(2));
+}
 
-// #[test]
-// fn test_eval_match() {
-//     let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
-//     let res = expr.to_run_expr().eval(&im::HashMap::new());
-//     assert_eq!(res, Value::Int64(2));
-// }
+#[test]
+fn test_eval_match() {
+    let (_, expr) = expression(Span::new(r"let snd = \x -> \y -> y in snd 1 2")).unwrap();
+    let res = expr.to_run_expr().eval(&im::HashMap::new());
+    assert_eq!(res, Value::Int64(2));
+}

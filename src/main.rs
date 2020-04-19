@@ -3,7 +3,7 @@ mod eval;
 mod parser;
 mod types;
 use eval::Value;
-use parser::{Decl, Equation, Span, Table, TypeDef};
+use parser::{Decl, Equation, Model, Span, Table, TypeDef};
 use postgres::{Client, Error, NoTls};
 use std::io::stdin;
 use types::{Scheme, Type};
@@ -19,7 +19,7 @@ pub fn exec(
             let ty = exp.get_type(type_env);
             match ty {
                 Ok((_, ty)) => {
-                    let res = exp.to_run_expr().eval(env, client);
+                    let res = exp.to_run_expr().eval(env);
                     println!("{:} : {:}", res, ty);
                 }
                 Err(err) => {
@@ -36,10 +36,16 @@ pub fn exec(
 fn load_module<B>(
     module: Result<(Span<'_>, Vec<Decl>), B>,
     client: &mut Postgres,
-) -> (im::HashMap<String, Scheme>, im::HashMap<String, Value>) {
+) -> (
+    im::HashMap<String, Scheme>,
+    im::HashMap<String, Value>,
+    Vec<(String, Value)>,
+) {
     let mut type_env = im::HashMap::new();
     let mut env: im::HashMap<String, Value> = im::HashMap::new();
+    let mut models = vec![];
 
+    // Todo: load equatios
     if let Ok((_, b)) = module {
         for decl in b {
             match decl {
@@ -48,8 +54,7 @@ fn load_module<B>(
                     let type_res = expr.expr.get_type(&type_env);
                     if let Ok(ty) = type_res {
                         type_env.insert(name.to_string(), (im::HashSet::new(), ty.1));
-                        env = env
-                            .update(name.to_string(), expr.expr.to_run_expr().eval(&env, client));
+                        env = env.update(name.to_string(), expr.expr.to_run_expr().eval(&env));
                     } else {
                         println!("Err {:?}", type_res);
                     }
@@ -65,7 +70,7 @@ fn load_module<B>(
                 }
 
                 Decl::Table(Table { name, fields, .. }) => {
-                    // TODO
+                    // TODO handle types
                     type_env.insert(
                         (*name).to_string(),
                         (
@@ -81,11 +86,27 @@ fn load_module<B>(
                     // for now table reference name = table name
                     env = env.update((*name).to_string(), Value::Table((*name).to_string()));
                 }
+
+                Decl::Model(Model { name, expr, .. }) => {
+                    // TODO make available for other models
+                    println!("{}", name);
+                    models.push(((*name).to_string(), expr.expr.to_run_expr().eval(&env)))
+                }
             }
         }
     }
 
-    (type_env, env)
+    (type_env, env, models)
+}
+
+fn run_models(models: Vec<(String, Value)>, client: &mut Postgres) {
+    println!("Found {} models, running...", models.len());
+
+    for (name, query) in models {
+        let a = client.exec(&format!("DROP TABLE {}", name));
+        let r = client.exec(&format!("CREATE TABLE {} AS SELECT s from t", name));
+        println!("{:?}", r);
+    }
 }
 
 pub struct Postgres {
@@ -130,8 +151,10 @@ fn main() -> Result<(), Error> {
     let rows = p.exec("SELECT s FROM t")?;
     let value: i32 = rows[0].get(0);
     println!("{}", value);
-    let (type_env, env) = load_module(module, &mut p);
+    let (type_env, env, models) = load_module(module, &mut p);
 
+    println!("models {:?}", models);
+    run_models(models, &mut p);
     loop {
         let mut s = String::new();
 
