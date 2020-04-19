@@ -166,6 +166,8 @@ fn identifier(i: Span) -> IResult<Span, Span> {
         || f == &"type"
         || f == &"match"
         || f == &"with"
+        || f == &"select"
+        || f == &"from"
     {
         return Err(nom::Err::Error((i, nom::error::ErrorKind::Verify)));
     }
