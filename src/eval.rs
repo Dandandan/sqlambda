@@ -1,5 +1,4 @@
 use super::parser::{Expr, Literal};
-use super::Postgres;
 extern crate im;
 
 /// Runtime expression, optimized for compactness and use in interpreter
@@ -72,6 +71,21 @@ pub enum Value {
 pub enum Query {
     // Projection
     Projection(Vec<String>, Box<Value>),
+}
+
+impl Query {
+    pub fn to_sql(&self) -> String {
+        match self {
+            Query::Projection(vs, val) => match &**val {
+                Value::QueryIO(q) => {
+                    let s = q.to_sql();
+                    format!("SELECT {} FROM {}", vs.join(","), s)
+                }
+                Value::Table(t) => format!("SELECT {} FROM {}", vs.join(","), t.to_string()),
+                _ => unimplemented!(),
+            },
+        }
+    }
 }
 
 impl<'a> Literal {

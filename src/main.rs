@@ -8,12 +8,7 @@ use postgres::{Client, Error, NoTls};
 use std::io::stdin;
 use types::{Scheme, Type};
 
-pub fn exec(
-    s: &str,
-    type_env: &im::HashMap<String, Scheme>,
-    env: &im::HashMap<String, Value>,
-    client: &mut Postgres,
-) {
+pub fn exec(s: &str, type_env: &im::HashMap<String, Scheme>, env: &im::HashMap<String, Value>) {
     match parser::expression(parser::Span::new(&s)) {
         Ok((_i, exp)) => {
             let ty = exp.get_type(type_env);
@@ -35,7 +30,6 @@ pub fn exec(
 
 fn load_module<B>(
     module: Result<(Span<'_>, Vec<Decl>), B>,
-    client: &mut Postgres,
 ) -> (
     im::HashMap<String, Scheme>,
     im::HashMap<String, Value>,
@@ -103,9 +97,14 @@ fn run_models(models: Vec<(String, Value)>, client: &mut Postgres) {
     println!("Found {} models, running...", models.len());
 
     for (name, query) in models {
-        let a = client.exec(&format!("DROP TABLE {}", name));
-        let r = client.exec(&format!("CREATE TABLE {} AS SELECT s from t", name));
-        println!("{:?}", r);
+        let _a = client.exec(&format!("DROP TABLE {}", name));
+
+        if let eval::Value::QueryIO(q) = query {
+            let sql = q.to_sql();
+            println!("Executing {}", sql);
+            let r = client.exec(&format!("CREATE TABLE {} AS {}", name, sql));
+            println!("{:?}", r);
+        }
     }
 }
 
@@ -151,7 +150,7 @@ fn main() -> Result<(), Error> {
     let rows = p.exec("SELECT s FROM t")?;
     let value: i32 = rows[0].get(0);
     println!("{}", value);
-    let (type_env, env, models) = load_module(module, &mut p);
+    let (type_env, env, models) = load_module(module);
 
     println!("models {:?}", models);
     run_models(models, &mut p);
@@ -161,6 +160,6 @@ fn main() -> Result<(), Error> {
         stdin()
             .read_line(&mut s)
             .expect("Did not enter a correct string");
-        exec(&s, &type_env, &env, &mut p);
+        exec(&s, &type_env, &env);
     }
 }

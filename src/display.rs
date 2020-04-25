@@ -1,4 +1,4 @@
-use super::eval::{Query, Value};
+use super::eval::Value;
 use super::parser::{Expr, Literal};
 use super::types::Type;
 
