@@ -108,7 +108,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "csv",
- "itertools",
+ "itertools 0.8.2",
  "lazy_static",
  "num-traits",
  "oorandom",
@@ -129,7 +129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddeaf7989f00f2e1d871a26a110f3ed713632feac17f65f03ca938c542618b60"
 dependencies = [
  "cast",
- "itertools",
+ "itertools 0.9.0",
 ]
 
 [[package]]
@@ -209,9 +209,9 @@ checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
 
 [[package]]
 name = "hermit-abi"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a0d737e0f947a1864e93d33fdef4af8445a00d1ed8dc0c8ddb73139ea6abf15"
+checksum = "61565ff7aaace3525556587bd2dc31d4a07071957be715e63ce7b1eccf51a8f4"
 dependencies = [
  "libc",
 ]
@@ -228,6 +228,15 @@ dependencies = [
  "sized-chunks",
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "itertools"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -386,9 +395,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bdc6c187c65bca4260c9011c9e3132efe4909da44726bad24cf7572ae338d7f"
+checksum = "4c1f4b0efa5fc5e8ceb705136bfee52cfdb6a4e3509f770b478cd6ed434232a7"
 dependencies = [
  "proc-macro2",
 ]
@@ -577,9 +586,9 @@ dependencies = [
 
 [[package]]
 name = "tinytemplate"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a3c6667d3e65eb1bc3aed6fd14011c6cbc3a0665218ab7f5daf040b9ec371a"
+checksum = "45e4bc5ac99433e0dcb8b9f309dd271a165ae37dde129b9e0ce1bfdd8bfe4891"
 dependencies = [
  "serde",
  "serde_json",
