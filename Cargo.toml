@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 nom = "5"
 nom_locate = "*"
-im = "14"
+im = "15"
 
 [dev-dependencies]
 criterion = "0.3"
